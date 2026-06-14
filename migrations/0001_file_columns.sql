@@ -1,0 +1,5 @@
+-- 为 documents 表增加文件存储字段
+ALTER TABLE documents
+  ADD COLUMN IF NOT EXISTS file_path TEXT,
+  ADD COLUMN IF NOT EXISTS file_type TEXT NOT NULL DEFAULT 'txt',
+  ADD COLUMN IF NOT EXISTS file_size INTEGER NOT NULL DEFAULT 0;

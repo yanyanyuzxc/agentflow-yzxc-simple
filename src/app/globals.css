@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+:root {
+  /* 品牌色系 */
+  --brand-50: #eef2ff;
+  --brand-100: #e0e7ff;
+  --brand-200: #c7d2fe;
+  --brand-300: #a5b4fc;
+  --brand-400: #818cf8;
+  --brand-500: #6366f1;
+  --brand-600: #4f46e5;
+  --brand-700: #4338ca;
+  --brand-800: #3730a3;
+  --brand-900: #312e81;
+
+  /* 亮色 */
+  --bg-app: #f7f8fb;
+  --bg-panel: #ffffff;
+  --bg-sidebar: #fbfbfd;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f3f4f6;
+  --bg-active: #eef2ff;
+
+  --border-subtle: #eef0f3;
+  --border-default: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #9ca3af;
+  --text-quaternary: #d1d5db;
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.04);
+
+  --gradient-brand: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --gradient-brand-soft: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
+}
+
+/* 暗色模式 */
+.dark {
+  --bg-app: #0a0a0f;
+  --bg-panel: #14141a;
+  --bg-sidebar: #0f0f15;
+  --bg-elevated: #1a1a22;
+  --bg-hover: #1f1f29;
+  --bg-active: #1e1b4b;
+
+  --border-subtle: #1f1f29;
+  --border-default: #2a2a35;
+  --border-strong: #3a3a45;
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+  --text-quaternary: #4b5563;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2);
+
+  --gradient-brand: linear-gradient(135deg, #818cf8 0%, #a78bfa 100%);
+  --gradient-brand-soft: linear-gradient(135deg, #1e1b4b 0%, #2d1b4b 100%);
+}
+
+@theme inline {
+  --color-background: var(--bg-app);
+  --color-foreground: var(--text-primary);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-glass-bg: rgba(255, 255, 255, 0.7);
+}
+
+.dark .dark\:text-white { color: var(--text-primary); }
+
+body {
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01";
+  transition: background 0.3s, color 0.3s;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+.dark ::-webkit-scrollbar-thumb { background: #2a2a35; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #3a3a45; }
+
+/* 动画 */
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.message-enter { animation: message-in 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.typing-cursor::after { content: "▍"; animation: blink 1s infinite; color: var(--brand-500); }
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.pulse-ring { animation: pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-active) 50%, var(--bg-hover) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* 品牌渐变 */
+.brand-text {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.brand-bg { background: var(--gradient-brand); }
