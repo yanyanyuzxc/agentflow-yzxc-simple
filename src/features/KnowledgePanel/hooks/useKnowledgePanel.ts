@@ -1,11 +1,18 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { Document } from "@/types/models";
 import type { KnowledgeTab } from "../config";
+import { documentService } from "@/services/documentService";
 
 export function useKnowledgePanel() {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>("documents");
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [docCount, setDocCount] = useState<number | null>(null);
+
+  // 加载文档数量（工具栏展示用）
+  useEffect(() => {
+    documentService.list().then((list) => setDocCount(list.length)).catch(() => {});
+  }, [refreshKey]);
 
   const handleUploadComplete = useCallback(() => {
     setActiveTab("documents");
@@ -30,6 +37,7 @@ export function useKnowledgePanel() {
     setActiveTab,
     selectedDoc,
     refreshKey,
+    docCount,
     handleUploadComplete,
     handleSelectDoc,
     handleBack,

@@ -53,7 +53,7 @@ export function ThoughtCard({ step }: ThoughtCardProps) {
             className="text-[13px] leading-relaxed whitespace-pre-wrap break-words"
             style={{ color: "var(--text-secondary)" }}
           >
-            {step.content || (step.status === "pending" ? "..." : "")}
+            {step.content || step.label || (step.status === "pending" ? "..." : "")}
           </p>
         </div>
       </div>

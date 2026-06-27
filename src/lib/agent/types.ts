@@ -16,6 +16,25 @@ export type SSEEvent =
   | { event: "error"; data: { message: string } }
   | { event: "done"; data: Record<string, never> };
 
+/** 图片入参 */
+export interface ImageInput {
+  url: string;
+  question?: string;
+}
+
+/** Planner 生成的执行步骤 */
+export interface PlanStep {
+  agent: "search" | "analyst" | "writer" | "reviewer";
+  task: string;
+}
+
+/** Planner 生成的执行计划 */
+export interface ExecutionPlan {
+  complexity: "simple" | "medium" | "complex";
+  reasoning: string;
+  steps: PlanStep[];
+}
+
 /** runAgentStream / resume 的入参 */
 export interface AgentRunOptions {
   threadId?: string;
@@ -23,4 +42,8 @@ export interface AgentRunOptions {
   userId?: number;
   /** 时间旅行：从 DB 重建的历史消息，注入到 Agent 上下文中 */
   history?: import("@langchain/core/messages").BaseMessage[];
+  /** 用户上传的图片 */
+  images?: ImageInput[];
+  /** 禁用的工具名列表。如不需要 RAG 时传 ["search_docs"] */
+  disabledTools?: string[];
 }

@@ -18,10 +18,18 @@ export type LoginInput = z.infer<typeof LoginInput>;
 
 // ==================== Agent ====================
 
+export const ImageAttachmentInput = z.object({
+  url: z.string().min(1).describe("图片URL"),
+  question: z.string().optional().describe("关于图片的具体问题"),
+});
+export type ImageAttachmentInput = z.infer<typeof ImageAttachmentInput>;
+
 export const AgentRunInput = z.object({
   question: z.string().optional(),
   threadId: z.string().optional(),
   resume: z.string().optional(),
+  images: z.array(ImageAttachmentInput).optional(),
+  webSearchEnabled: z.boolean().optional(),
 });
 export type AgentRunInput = z.infer<typeof AgentRunInput>;
 

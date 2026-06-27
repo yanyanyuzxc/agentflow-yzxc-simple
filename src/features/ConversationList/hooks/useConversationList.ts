@@ -2,6 +2,24 @@ import { useEffect, useState, useCallback } from "react";
 import { chatService } from "@/services/chatService";
 import { useChatStore } from "@/store/chat/store";
 import type { StoredConversation } from "@/lib/db";
+import type { StreamingAgentStep } from "@/types/agent";
+
+/** 从已加载的消息中恢复 agent_steps 到 store */
+function restoreStepsFromMessages(messages: { agent_steps?: unknown }[]) {
+  const lastAssistant = [...messages].reverse().find((m) => {
+    const steps = (m as any).agent_steps;
+    return steps && (typeof steps === "string" ? steps.length > 2 : Array.isArray(steps) && steps.length > 0);
+  });
+  if (lastAssistant) {
+    try {
+      const raw = (lastAssistant as any).agent_steps;
+      const steps: StreamingAgentStep[] = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (Array.isArray(steps) && steps.length > 0) {
+        useChatStore.getState().setSteps(steps.map((s) => ({ ...s, status: "done" as const })));
+      }
+    } catch { /* ignore parse errors */ }
+  }
+}
 
 export function useConversationList() {
   const [loading, setLoading] = useState(true);
@@ -20,7 +38,31 @@ export function useConversationList() {
   }, []);
 
   useEffect(() => {
-    fetchList();
+    fetchList().then(() => {
+      // 刷新后恢复：如果有持久化的 threadId 但没有激活会话，自动匹配
+      const store = useChatStore.getState();
+      if (!store.activeConversationId && store.threadId) {
+        const match = store.conversations.find((c) => c.thread_id === store.threadId);
+        if (match) {
+          store.setActiveConversationId(match.id);
+          // 异步加载消息
+          chatService.get(match.id).then((detail) => {
+            store.setMessages(
+              detail.messages.map((m) => ({
+                id: m.id,
+                conversation_id: m.conversation_id,
+                role: m.role,
+                content: m.content,
+                tool_calls: m.tool_calls as never,
+                agent_steps: m.agent_steps as never,
+                created_at: m.created_at,
+              })),
+            );
+            restoreStepsFromMessages(detail.messages);
+          }).catch(() => {});
+        }
+      }
+    });
   }, [fetchList]);
 
   const handleNew = () => {
@@ -34,6 +76,7 @@ export function useConversationList() {
     const store = useChatStore.getState();
     store.setActiveConversationId(conv.id);
     store.setThreadId(conv.thread_id);
+    store.resetSteps();
 
     try {
       const detail = await chatService.get(conv.id);
@@ -48,6 +91,7 @@ export function useConversationList() {
           created_at: m.created_at,
         })),
       );
+      restoreStepsFromMessages(detail.messages);
     } catch {
       // messages might be empty, that's ok
     }

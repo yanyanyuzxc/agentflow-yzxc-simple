@@ -2,9 +2,11 @@ import { useCallback } from "react";
 import { useChatStore } from "@/store/chat/store";
 import { chatService } from "@/services/chatService";
 
-export function useChatSend(send: (text: string) => void) {
+import type { ImageAttachment } from "@/types/models";
+
+export function useChatSend(send: (text: string, images?: ImageAttachment[]) => void) {
   return useCallback(
-    async (text: string) => {
+    async (text: string, images?: ImageAttachment[]) => {
       const store = useChatStore.getState();
       if (store.isStreaming) return;
 
@@ -17,7 +19,20 @@ export function useChatSend(send: (text: string) => void) {
       let conversationId = store.activeConversationId;
       let tid = store.threadId;
 
-      if (!tid) {
+      // 恢复：有 threadId 但没有 activeConversationId（刷新后 persist 只保存了 threadId）
+      if (tid && !conversationId) {
+        try {
+          const list = await chatService.list();
+          const match = list.find((c) => c.thread_id === tid);
+          if (match) {
+            conversationId = match.id;
+            store.setActiveConversationId(match.id);
+          }
+        } catch { /* 网络不通，后面走创建逻辑 */ }
+      }
+
+      // 仍然没有 → 新建会话
+      if (!conversationId) {
         try {
           const conv = await chatService.create();
           store.addConversation(conv);
@@ -26,7 +41,8 @@ export function useChatSend(send: (text: string) => void) {
           conversationId = conv.id;
           tid = conv.thread_id;
         } catch {
-          tid = crypto.randomUUID();
+          // 网络彻底不通：用本地 UUID 做 threadId，消息只存本地
+          tid = tid || crypto.randomUUID();
           store.setThreadId(tid);
         }
       }
@@ -37,23 +53,21 @@ export function useChatSend(send: (text: string) => void) {
         conversation_id: conversationId ?? 0,
         role: "user",
         content: text,
+        images: images?.length ? images : undefined,
         created_at: new Date().toISOString(),
       });
 
       if (conversationId) {
-        chatService
-          .addMessage(conversationId, { role: "user", content: text })
-          .then((saved) => {
-            // 用 DB ID 替换临时 ID
-            const st = useChatStore.getState();
-            st.setMessages(
-              st.messages.map((m) => (m.id === tempId ? { ...m, id: saved.id } : m)),
-            );
-          })
-          .catch(() => {});
+        try {
+          const saved = await chatService.addMessage(conversationId, { role: "user", content: text });
+          // 用 DB ID 替换临时 ID
+          useChatStore.getState().setMessages(
+            useChatStore.getState().messages.map((m) => (m.id === tempId ? { ...m, id: saved.id } : m)),
+          );
+        } catch { /* 消息保存失败不影响发送 */ }
       }
 
-      send(text);
+      send(text, images);
     },
     [send],
   );

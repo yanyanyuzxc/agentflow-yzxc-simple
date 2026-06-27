@@ -72,10 +72,37 @@
 
 ### 体验打磨
 - [x] AI 输出 Markdown 渲染（react-markdown + remark-gfm + rehype-highlight）
-- [ ] 暗色模式
+- [x] SSE 步骤持久化（agent_steps JSON → DB → 刷新恢复）
+- [x] 联网搜索开关（按钮式，类似 DeepSeek 网页端）
+- [x] 搜索结果抽屉（📚 参考 N 个来源 → 右侧滑入面板）
+- [x] 布局重构（去掉右侧知识面板，左侧导航切换 对话/知识库）
+- [x] 知识库页面重设计（紧凑工具栏 + 分段控件 + 文档卡片式列表）
+- [x] RAG 三模式检索 UI（语义/关键词/混合切换）
+- [x] 暗色模式
 - [ ] 响应式布局
 - [ ] sonner toast 通知
 - [ ] 错误恢复/重试
+
+### Phase 10 — 升级路线图
+
+#### 10.1 多模态
+- [x] `see_image` 工具（Qwen3.5-4B 视觉模型）
+- [x] 图片上传 + 粘贴 + 拖拽（ChatInput 支持 5 张）
+
+#### 10.2 Agent 架构升级
+- [x] Orchestrator/Supervisor 模式（替代 Planner）
+- [x] `agentProfiles.ts` — search/analyst/writer 三个专业 Agent
+- [x] `speak(agent, instruction)` 工具 — LLM 动态委托子 Agent
+- [x] 事件缓冲模式 — 子 Agent SSE 事件在主循环中排空
+- [x] ToolRegistry.default() 动态注册/清理 speak 工具
+
+#### 10.4 营销官网
+- [x] Route Group 分层：`(marketing)/` 官网 + `(app)/chat` 聊天应用
+- [x] 首页 Hero + 功能展示 + 三步开始 + CTA
+- [x] 毛玻璃导航栏 + 页脚
+- [x] 深色模式支持（CSS 变量）
+- [ ] 文档站（Velite + MDX）
+- [ ] 博客
 
 ---
 
@@ -109,3 +136,22 @@
 - [ ] 表单前端 Zod 校验（AuthModal 目前用 HTML required）
 - [ ] sonner toast 统一错误提示
 - [ ] 骨架屏/加载态优化
+
+---
+
+## 下一步
+
+### 短期
+- [ ] 文档站（Velite + MDX）
+- [ ] 响应式布局
+- [ ] 健康检查端点 `/api/health`
+
+### 中期
+- [ ] Redis 限流 + 缓存
+- [ ] RAG 第二梯队（Query Decomposition, Small-to-Big）
+- [ ] 分页查询
+
+### 长期
+- [ ] BullMQ 异步 Agent 任务
+- [ ] OpenTelemetry 可观测性
+- [ ] WebSocket 实时推送

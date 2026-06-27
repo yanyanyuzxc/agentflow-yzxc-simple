@@ -1,8 +1,8 @@
 // ==================== 类 ====================
-export { BaseAgent } from "./base";
 export { ChatAgent } from "./chat-agent";
-export { AgentOrchestrator } from "./orchestrator";
-export type { OrchestrationTask, OrchestrationResult } from "./orchestrator";
+export { Orchestrator } from "./orchestrator";
+export type { AgentProfile, OrchestrationResult } from "./orchestrator";
+export { Planner } from "./planner";
 
 // ==================== 基础设施 ====================
 export { AgentConfig } from "./config";
@@ -10,7 +10,10 @@ export { ToolKit } from "./toolkit";
 export { CheckpointManager } from "./checkpoint";
 
 // ==================== 类型 ====================
-export type { SSEEvent, AgentRunOptions } from "./types";
+export type { SSEEvent, AgentRunOptions, PlanStep, ExecutionPlan } from "./types";
+
+// ==================== 提示词 ====================
+export { SEARCH_AGENT_PROMPT, ANALYST_AGENT_PROMPT, WRITER_AGENT_PROMPT, REVIEWER_AGENT_PROMPT } from "./prompts";
 
 // ==================== 便捷：默认实例 ====================
 import { ChatAgent } from "./chat-agent";

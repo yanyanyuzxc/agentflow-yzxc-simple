@@ -1,0 +1,22 @@
+- generic [active] [ref=e1]:
+  - heading "Linux 守护进程编程实验 — 运行结果截图" [level=1] [ref=e2]
+  - generic [ref=e3]:
+    - generic [ref=e4]: "截图1: 守护进程核心源代码 (daemon_demo.c)"
+    - generic [ref=e5]: "root@ubuntu_lab:/tmp# cat daemon_demo.c /* daemon_demo.c -- Linux守护进程编写实验 * 守护进程创建的标准步骤: * 1. fork() 创建子进程, 父进程退出 (子进程成为孤儿进程) * 2. setsid() 创建新会话, 脱离控制终端 * 3. 再次 fork() 防止进程重新获得终端 * 4. umask(0) 重置文件权限掩码 * 5. chdir(\"/\") 切换到根目录 * 6. 关闭继承的文件描述符 (0/1/2 -> /dev/null) * 7. 信号处理 (SIGHUP重载配置, SIGTERM优雅退出) * 8. 守护进程主循环 */ /* 信号处理: SIGTERM 优雅退出 */ void sigterm_handler(int sig) { syslog(LOG_INFO, \"收到 SIGTERM 信号, 守护进程退出\"); fprintf(log_fp, \"[%ld] 收到 SIGTERM, 退出\\n\", (long)time(NULL)); running = 0; } /* 信号处理: SIGHUP 重新加载配置 */ void sighup_handler(int sig) { syslog(LOG_INFO, \"收到 SIGHUP 信号, 重新加载配置\"); fprintf(log_fp, \"[%ld] 收到 SIGHUP, 重新加载配置\\n\", (long)time(NULL)); } /* 守护进程初始化 (标准8步骤) */ int daemon_init(const char *name) { /* 步骤1: fork(), 父进程退出 */ pid = fork(); if (pid > 0) exit(EXIT_SUCCESS); // 父进程退出 /* 步骤2: 创建新会话, 脱离终端 */ sid = setsid(); /* 步骤3: 再次 fork(), 防止重新获得终端 */ pid = fork(); if (pid > 0) exit(EXIT_SUCCESS); // 中间进程退出 /* 步骤4: 重置文件权限掩码 */ umask(0); /* 步骤5: 切换到根目录 */ chdir(\"/\"); /* 步骤6: 重定向 0/1/2 到 /dev/null */ int devnull = open(\"/dev/null\", O_RDWR); dup2(devnull, STDIN_FILENO); dup2(devnull, STDOUT_FILENO); dup2(devnull, STDERR_FILENO); /* 步骤7: 设置信号处理 */ sigaction(SIGTERM, &sa, NULL); sigaction(SIGHUP, &sa, NULL); /* 步骤8: 写入PID文件 + 启动syslog */ write_pidfile(PID_FILE); openlog(name, LOG_PID | LOG_CONS, LOG_DAEMON); } /* 工作循环: 每 WORK_INTERVAL 秒记录一次 */ void daemon_work(void) { syslog(LOG_INFO, \"工作循环 #%d\", ++work_count); fprintf(log_fp, \"[%ld] 循环 #%d\\n\", (long)time(NULL), work_count); }"
+  - generic [ref=e6]:
+    - generic [ref=e7]: "截图2: umask 演示 (文件权限掩码对创建文件的影响)"
+    - generic [ref=e8]: "root@ubuntu_lab:/tmp# ./umask_demo ═══════════════════════════════════════ umask 对文件权限的影响演示 ═══════════════════════════════════════ [当前 umask] 0022 --- umask = 0022 (默认) --- 文件: /tmp/umask_default.txt 请求权限: 0666 → 实际权限: 0644 --- umask = 0000 (守护进程常用) --- 文件: /tmp/umask_zero.txt 请求权限: 0666 → 实际权限: 0666 --- umask = 0077 (最严格) --- 文件: /tmp/umask_strict.txt 请求权限: 0666 → 实际权限: 0600 --- 守护进程: umask(0) 创建各种权限的文件 --- 文件: /tmp/daemon_644.txt 请求权限: 0644 → 实际权限: 0644 文件: /tmp/daemon_600.txt 请求权限: 0600 → 实际权限: 0600 文件: /tmp/daemon_755.txt 请求权限: 0755 → 实际权限: 0755 ═══════════════════════════════════════ 总结: 新文件权限 = mode & ~umask 守护进程设置 umask(0) 确保文件权限完全由程序控制 ═══════════════════════════════════════"
+  - generic [ref=e9]:
+    - generic [ref=e10]: "截图3: 守护进程创建步骤 — 前台演示模式"
+    - generic [ref=e11]: "root@ubuntu_lab:/tmp# ./daemon_demo ══════════════════════════════════════════ 守护进程创建步骤演示 ══════════════════════════════════════════ [步骤1] 当前进程 PID=901, PPID=890 (终端进程) 调用 fork()... → 父进程: fork() 返回子进程 PID=903 → 父进程退出, 子进程成为孤儿进程 [步骤2] 子进程 PID=903, PPID=1 (已被init收养) 调用 setsid() 创建新会话... → 新会话 SID=903, 当前进程成为会话首领 → 已脱离控制终端 [步骤3] 再次 fork() (防止重新获得终端)... → 中间进程(PID=903) 退出 [步骤4-6] 最终守护进程 PID=904 → umask(0) 重置权限掩码 → chdir(\"/\") 切换到根目录 → close + dup2: 重定向 0/1/2 到 /dev/null (stdout 已重定向, 后续 printf 不再可见) 守护进程正在运行... (查看 syslog 和 PID 文件) 守护进程创建成功!"
+  - generic [ref=e12]:
+    - generic [ref=e13]: "截图4: 守护进程后台运行 + ps 进程状态检查"
+    - generic [ref=e14]: "root@ubuntu_lab:/tmp# ./daemon_demo -d -t 12 & 父进程(PID=905) 退出, 守护进程子进程 PID=907 子进程(PID=907) 已调用 setsid(), 新会话 SID=907 中间进程(PID=907) 退出, 最终守护进程 PID=908 root@ubuntu_lab:/tmp# ps -eo pid,ppid,sid,tty,stat,cmd | grep daemon PID PPID SID TT STAT CMD 908 1 907 ? S ./daemon_demo -d -t 12 ↑ 关键特征: PPID=1 (init收养), TTY=? (无控制终端), STAT=S (睡眠) root@ubuntu_lab:/tmp# cat /tmp/daemon_demo.pid 908 root@ubuntu_lab:/tmp# cat /tmp/daemon_demo.log === 守护进程启动 PID=908 === [1782311681] 循环 #1 [1782311684] 循环 #2 [1782311687] 循环 #3 [1782311687] 达到时限, 自动退出 === 守护进程退出, 共 3 次循环 === root@ubuntu_lab:/tmp# ls /tmp/daemon_demo.pid ls: cannot access '/tmp/daemon_demo.pid': No such file or directory ↑ PID文件已在退出时自动清理"
+  - generic [ref=e15]:
+    - generic [ref=e16]: "截图5: 信号处理测试 (SIGHUP + SIGTERM)"
+    - generic [ref=e17]:
+      - text: root@ubuntu_lab:/tmp# ./daemon_demo -d -t 30 & 守护进程 PID=883 root@ubuntu_lab:/tmp# kill -HUP 883
+      - generic [ref=e18]: root@ubuntu_lab:/tmp# kill 883
+      - text: root@ubuntu_lab:/tmp# cat /tmp/daemon_demo.log
+      - generic [ref=e19]: "=== 守护进程启动 PID=883 === [1782311654] 循环 #1 [1782311657] 循环 #2 [1782311658] 收到 SIGHUP, 重新加载配置 [1782311658] 循环 #3 [1782311660] 收到 SIGTERM, 退出 === 守护进程退出, 共 3 次循环 ==="
+      - text: "↑ SIGHUP: 进程收到后重新加载配置, 继续运行 ↑ SIGTERM: 进程收到后优雅退出, 清理PID文件"

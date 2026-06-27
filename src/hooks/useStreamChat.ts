@@ -15,6 +15,10 @@ function safeParse(raw: string): Record<string, unknown> {
   }
 }
 
+/**
+ * 同步 dispatch — 只做 store 状态更新，不做 IO。
+ * 持久化统一由调用方（onclose / abort）负责，不在消息处理中混入异步。
+ */
 function dispatch(
   store: ReturnType<typeof useChatStore.getState>,
   event: string,
@@ -30,10 +34,7 @@ function dispatch(
       break;
 
     case "thought":
-      store.fillThought(
-        payload.step_id as string,
-        payload.content as string,
-      );
+      store.fillThought(payload.step_id as string, payload.content as string);
       break;
 
     case "tool_call":
@@ -52,10 +53,7 @@ function dispatch(
       break;
 
     case "answer_chunk":
-      store.appendAnswerChunk(
-        payload.step_id as string,
-        payload.content as string,
-      );
+      store.appendAnswerChunk(payload.step_id as string, payload.content as string);
       break;
 
     case "message_chunk":
@@ -81,7 +79,6 @@ function dispatch(
 
     case "done":
       store.setStreaming(false);
-      persistAssistantMessage();
       break;
 
     default:
@@ -89,8 +86,9 @@ function dispatch(
   }
 }
 
-function persistAssistantMessage() {
+async function persistAssistantMessage() {
   const latest = useChatStore.getState();
+  console.log("[done] persistAssistantMessage:", latest);
   const convId = latest.activeConversationId;
 
   // 找最后一条 assistant 消息（由 message_chunk 流式构建）
@@ -98,7 +96,6 @@ function persistAssistantMessage() {
   const lastIdx = msgs.length - 1;
   const lastMsg = msgs[lastIdx];
   if (!lastMsg || lastMsg.role !== "assistant" || !lastMsg.content) {
-    console.warn("[done] no answer text to persist");
     return;
   }
 
@@ -108,38 +105,40 @@ function persistAssistantMessage() {
     latest.setMessages(msgs);
   }
 
-  // 持久化到 DB
+  // 持久化到 DB（await 确保刷新前写入完成）
   if (convId) {
-    const tempId = lastMsg.id;
-    chatService
-      .addMessage(convId, {
+    try {
+      const saved = await chatService.addMessage(convId, {
         role: "assistant",
         content: lastMsg.content,
         agent_steps: latest.agentSteps,
-      })
-      .then((saved) => {
-        // 用 DB ID 替换临时 ID
-        const st = useChatStore.getState();
-        st.setMessages(
-          st.messages.map((m) => (m.id === tempId ? { ...m, id: saved.id } : m)),
-        );
-        console.log("[done] assistant message persisted OK, id=%d", saved.id);
-      })
-      .catch((err) => console.error("[done] persist failed:", err));
+      });
+      const st = useChatStore.getState();
+      st.setMessages(
+        st.messages.map((m) => (m.id === lastMsg.id ? { ...m, id: saved.id } : m)),
+      );
+    } catch (err) {
+      console.error("[done] persist failed:", err);
+    }
   }
 }
 
 export function useStreamChat() {
   const abortRef = useRef<AbortController | null>(null);
+  // 标记"已持久化"，防止 onclose 重复保存。
+  // true → abort()/onerror 已保存过，onclose 跳过
+  // false → onclose 负责保存（正常 done 或意外断连）
+  const persistedRef = useRef(false);
 
-  const send = useCallback(async (question: string) => {
+  const send = useCallback(async (question: string, images?: import("@/types/models").ImageAttachment[]) => {
+    persistedRef.current = false;
     abortRef.current = new AbortController();
     const store = useChatStore.getState();
 
     await fetchEventSource("/api/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-      body: JSON.stringify({ question, threadId: store.threadId }),
+      body: JSON.stringify({ question, threadId: store.threadId, images, webSearchEnabled: store.webSearchEnabled }),
       signal: abortRef.current.signal,
       openWhenHidden: true,
 
@@ -149,17 +148,20 @@ export function useStreamChat() {
       },
 
       onclose() {
+        // 唯一持久化入口：正常 done / 意外断连 / onerror 抛错后
         const cur = useChatStore.getState();
-        if (!cur.isInterrupted) {
-          cur.setStreaming(false);
+        if (!cur.isInterrupted && !persistedRef.current) {
+          persistAssistantMessage().finally(() => cur.setStreaming(false));
         }
+        // interrupt 或 abort 已保存 → 跳过
       },
 
       onerror(err) {
         const cur = useChatStore.getState();
         cur.setError(err.message);
         cur.setStreaming(false);
-        persistAssistantMessage(); // 保存已有的部分答案
+        // 不在这里 persist，交给 onclose 统一处理
+        // persistedRef 保持 false → onclose 会保存
         throw err;
       },
     });
@@ -172,13 +174,14 @@ export function useStreamChat() {
     store.setStreaming(true);
     store.setInterrupted(null);
     store.setError(null);
+    persistedRef.current = false;
 
     abortRef.current = new AbortController();
 
     await fetchEventSource(`/api/agent/${store.threadId}/resume`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-      body: JSON.stringify({ resume: resumeInput }),
+      body: JSON.stringify({ resume: resumeInput, webSearchEnabled: useChatStore.getState().webSearchEnabled }),
       signal: abortRef.current.signal,
       openWhenHidden: true,
 
@@ -188,20 +191,29 @@ export function useStreamChat() {
       },
 
       onclose() {
-        useChatStore.getState().setStreaming(false);
+        const cur = useChatStore.getState();
+        if (!cur.isInterrupted && !persistedRef.current) {
+          persistAssistantMessage().finally(() => cur.setStreaming(false));
+        } else {
+          cur.setStreaming(false);
+        }
       },
 
       onerror(err) {
         const cur = useChatStore.getState();
         cur.setError(err.message);
         cur.setStreaming(false);
-        persistAssistantMessage(); // 保存已有的部分答案
+        // 交给 onclose 统一持久化
         throw err;
       },
     });
   }, []);
 
-  const abort = useCallback(() => {
+  const abort = useCallback(async () => {
+    // 人为中断：立即保存已输出的部分答案，标记已持久化
+    await persistAssistantMessage();
+    persistedRef.current = true;
+    useChatStore.getState().setStreaming(false);
     abortRef.current?.abort();
   }, []);
 

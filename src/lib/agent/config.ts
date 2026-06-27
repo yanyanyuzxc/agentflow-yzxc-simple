@@ -15,6 +15,10 @@ export class AgentConfig {
   readonly dbUrl: string;
   /** 每次工具调用后是否自动中断等待确认 */
   readonly interruptAfter: string[];
+  /** 自定义 system prompt。设置后跳过默认的 buildSystemPrompt() */
+  readonly systemPrompt?: string;
+  /** 禁用的工具名列表（如 analyst/writer 不需要 web_search） */
+  readonly disabledTools?: string[];
 
   constructor(overrides?: Partial<{
     apiKey: string;
@@ -24,6 +28,8 @@ export class AgentConfig {
     embeddingBaseURL: string;
     dbUrl: string;
     interruptAfter: string[];
+    systemPrompt: string;
+    disabledTools: string[];
   }>) {
     const env = getEnv();
     this.apiKey = overrides?.apiKey ?? env.SILICONFLOW_API_KEY;
@@ -33,5 +39,7 @@ export class AgentConfig {
     this.embeddingBaseURL = overrides?.embeddingBaseURL ?? env.LLM_BASE_URL ?? "https://api.siliconflow.cn/v1";
     this.dbUrl = overrides?.dbUrl ?? env.DATABASE_URL;
     this.interruptAfter = overrides?.interruptAfter ?? [];
+    this.systemPrompt = overrides?.systemPrompt;
+    this.disabledTools = overrides?.disabledTools;
   }
 }

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Cog } from "lucide-react";
 import type { StreamingAgentStep } from "@/types/agent";
 import { ThoughtCard } from "./components/ThoughtCard";
 import { ToolCallCard } from "./components/ToolCallCard";
 import { ObservationCard } from "./components/ObservationCard";
 import { AnswerCard } from "./components/AnswerCard";
+import { SearchDrawer } from "./components/SearchDrawer";
 
 interface AgentStepsProps {
   steps: StreamingAgentStep[];
@@ -14,6 +15,7 @@ interface AgentStepsProps {
 
 export function AgentSteps({ steps }: AgentStepsProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const [searchDrawerStep, setSearchDrawerStep] = useState<StreamingAgentStep | null>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -77,7 +79,9 @@ export function AgentSteps({ steps }: AgentStepsProps) {
                 )}
                 {step.type === "thought" && <ThoughtCard step={step} />}
                 {step.type === "tool_call" && <ToolCallCard step={step} />}
-                {step.type === "observation" && <ObservationCard step={step} />}
+                {step.type === "observation" && (
+                  <ObservationCard step={step} onViewResults={setSearchDrawerStep} />
+                )}
                 {step.type === "answer" && <AnswerCard step={step} />}
               </div>
             );
@@ -85,6 +89,9 @@ export function AgentSteps({ steps }: AgentStepsProps) {
           <div ref={endRef} />
         </div>
       </div>
+
+      {/* 搜索结果抽屉 */}
+      <SearchDrawer step={searchDrawerStep} onClose={() => setSearchDrawerStep(null)} />
     </div>
   );
 }

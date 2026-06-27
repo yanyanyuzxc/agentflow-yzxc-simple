@@ -54,11 +54,18 @@ export interface Conversation {
   created_at: string;
 }
 
+export interface ImageAttachment {
+  url: string;       // "/api/images/xxx.png"
+  name: string;      // 原始文件名
+  question?: string; // 关于图片的问题
+}
+
 export interface Message {
   id: number;
   conversation_id: number;
   role: "user" | "assistant" | "tool" | "system";
   content: string;
+  images?: ImageAttachment[];
   tool_calls?: ToolCallPayload[];
   agent_steps?: string; // JSON-serialized AgentStep[]
   tokens?: number;

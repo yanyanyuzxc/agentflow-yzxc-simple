@@ -16,15 +16,20 @@ export function EmptyState({
   className = "",
 }: EmptyStateProps) {
   return (
-    <div className={`flex flex-col items-center justify-center py-10 px-4 text-center ${className}`}>
+    <div className={`flex flex-col items-center justify-center py-12 px-4 text-center ${className}`}>
       {icon && (
-        <div className="mb-3 text-gray-300">{icon}</div>
+        <div
+          className="mb-4 w-16 h-16 rounded-2xl flex items-center justify-center"
+          style={{ background: "var(--gradient-brand-soft)" }}
+        >
+          <span style={{ color: "var(--brand-500)", opacity: 0.6 }}>{icon}</span>
+        </div>
       )}
-      <p className="text-sm font-medium text-gray-500">{title}</p>
+      <p className="text-sm font-semibold" style={{ color: "var(--text-secondary)" }}>{title}</p>
       {description && (
-        <p className="text-xs text-gray-400 mt-1 max-w-52">{description}</p>
+        <p className="text-xs mt-1.5 max-w-56 leading-relaxed" style={{ color: "var(--text-tertiary)" }}>{description}</p>
       )}
-      {action && <div className="mt-3">{action}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

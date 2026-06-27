@@ -2,16 +2,14 @@ import { createStore } from "./middleware/createStore";
 
 interface UIState {
   showLeftPanel: boolean;
-  showRightPanel: boolean;
-  zenMode: boolean;
+  activePage: "chat" | "knowledge";
   theme: "light" | "dark" | "system";
   dismissedBannerIds: string[];
 }
 
 interface UIActions {
   toggleLeftPanel: () => void;
-  toggleRightPanel: () => void;
-  toggleZenMode: () => void;
+  setActivePage: (page: UIState["activePage"]) => void;
   setTheme: (t: UIState["theme"]) => void;
   dismissBanner: (id: string) => void;
 }
@@ -23,14 +21,12 @@ export const useUIStore = createStore<UIStore>({
   persist: { name: "chat-ui" },
 })((set) => ({
   showLeftPanel: true,
-  showRightPanel: true,
-  zenMode: false,
+  activePage: "chat" as const,
   theme: "system" as const,
   dismissedBannerIds: [],
 
   toggleLeftPanel: () => set((s) => ({ showLeftPanel: !s.showLeftPanel }), false, "toggleLeftPanel"),
-  toggleRightPanel: () => set((s) => ({ showRightPanel: !s.showRightPanel }), false, "toggleRightPanel"),
-  toggleZenMode: () => set((s) => ({ zenMode: !s.zenMode }), false, "toggleZenMode"),
+  setActivePage: (page) => set({ activePage: page }, false, "setActivePage"),
   setTheme: (theme) => set({ theme }, false, "setTheme"),
   dismissBanner: (id) =>
     set((s) => ({ dismissedBannerIds: [...s.dismissedBannerIds, id] }), false, "dismissBanner"),

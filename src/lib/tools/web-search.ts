@@ -7,11 +7,11 @@ const WebSearchInput = z.object({
   search_depth: z
     .enum(["basic", "advanced"])
     .optional()
-    .describe("basic=快速搜索（简单事实）, advanced=深度搜索（复杂研究，更慢但更全）。默认 basic"),
+    .describe("basic=快速搜索（简单事实）, advanced=深度搜索（更长摘要，稍慢但更全）。默认 advanced"),
   max_results: z
     .number().int().min(3).max(10)
     .optional()
-    .describe("返回结果数，默认 5。简单问题用 3，深度研究用 8-10"),
+    .describe("返回结果数，默认 8。简单问题用 3-5，深度研究用 8-10"),
 });
 type WebSearchInput = z.infer<typeof WebSearchInput>;
 
@@ -34,11 +34,11 @@ interface TavilyResult {
 async function searchTavily(
   query: string,
   maxResults = 5,
-  searchDepth: "basic" | "advanced" = "basic",
+  searchDepth: "basic" | "advanced" = "advanced",
 ): Promise<SearchHit[]> {
   const apiKey = getEnv().TAVILY_API_KEY!;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), 8000);
 
   try {
     const response = await fetch("https://api.tavily.com/search", {
@@ -152,17 +152,21 @@ async function searchBing(
   }
 }
 
-// ==================== 搜索调度 ====================
+// ==================== 搜索调度（Tavily 优先，Bing 兜底） ====================
 
-/** 检测是否包含中文字符 */
-function hasChinese(text: string): boolean {
-  return /[一-鿿]/.test(text);
-}
-
+/**
+ * 执行搜索：Tavily 优先，超时才降级到 Bing。
+ *
+ * 策略：
+ * - 有 Tavily key → 先调 Tavily（3 秒超时），结果不够才补 Bing
+ * - 无 Tavily key → 直接用 Bing
+ * - Bing 结果质量较差，只做兜底不做主力
+ */
 async function doSearch(
   query: string,
   maxResults: number,
   searchDepth: "basic" | "advanced",
+  tavilyTimeoutMs = 10000,
 ): Promise<SearchHit[]> {
   const results: SearchHit[] = [];
   const seen = new Set<string>();
@@ -177,30 +181,29 @@ async function doSearch(
     }
   };
 
-  // 并行搜索多个源，合并去重
-  const isChinese = hasChinese(query);
-  const promises: Promise<SearchHit[]>[] = [];
+  const hasTavily = !!getEnv().TAVILY_API_KEY;
 
-  if (getEnv().TAVILY_API_KEY) {
-    promises.push(
-      searchTavily(query, maxResults, searchDepth).catch(() => []),
-    );
+  if (hasTavily) {
+    // Tavily 优先：3 秒超时
+    const tavilyHits = await Promise.race([
+      searchTavily(query, maxResults, searchDepth),
+      new Promise<SearchHit[]>((resolve) =>
+        setTimeout(() => resolve([]), tavilyTimeoutMs),
+      ),
+    ]).catch(() => []);
+
+    addHits(tavilyHits);
+
+    // Tavily 结果不够 → Bing 兜底
+    if (results.length < 3) {
+      const bingHits = await searchBing(query, maxResults).catch(() => []);
+      addHits(bingHits);
+    }
+  } else {
+    // 无 Tavily → 纯 Bing
+    const bingHits = await searchBing(query, maxResults).catch(() => []);
+    addHits(bingHits);
   }
-
-  // 中文查询也并行搜 Bing（返回中文结果更好）
-  if (isChinese || !getEnv().TAVILY_API_KEY) {
-    promises.push(
-      searchBing(query, maxResults).catch(() => []),
-    );
-  }
-
-  // 只有英文且 Tavily 不可用时才单搜 Bing
-  if (promises.length === 0) {
-    promises.push(searchBing(query, maxResults).catch(() => []));
-  }
-
-  const allResults = await Promise.all(promises);
-  for (const hits of allResults) addHits(hits);
 
   // 按内容长度排序：有内容的优先
   results.sort((a, b) => (b.content?.length || 0) - (a.content?.length || 0));
@@ -212,13 +215,14 @@ export const webSearchTool: ToolDef<WebSearchInput> = {
   name: "web_search",
   description:
     "搜索互联网获取实时信息。当知识库找不到答案或需要最新资料时使用。" +
-    "简单事实用 basic 深度 + 3-5 条结果，复杂研究用 advanced 深度 + 8-10 条结果。",
+    "简单事实用 basic 深度 + 3-5 条结果，复杂研究用 advanced 深度 + 8-10 条结果。" +
+    "advanced 返回更长摘要。默认 advanced + 8 条结果。",
   schema: WebSearchInput,
 
   async call({ query, search_depth, max_results }) {
     const startTime = performance.now();
-    const depth = search_depth ?? "basic";
-    const limit = max_results ?? 5;
+    const depth = search_depth ?? "advanced";
+    const limit = max_results ?? 8;
 
     try {
       const hits = await doSearch(query, limit, depth);

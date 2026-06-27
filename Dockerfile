@@ -12,6 +12,11 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# 构建时需要这些 env 变量（Next.js 会收集 API 路由数据）
+ENV DATABASE_URL=postgresql://postgres:postgres@placeholder:5432/chat_embeddings
+ENV JWT_ACCESS_SECRET=build-placeholder-secret-at-least-32-chars-long
+ENV JWT_REFRESH_SECRET=build-placeholder-secret-at-least-32-chars-long
+ENV SILICONFLOW_API_KEY=sk-build-placeholder
 RUN bun run build
 
 # runner
@@ -20,12 +25,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 复制运行所需文件
-COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/migrations ./migrations
+# 从 builder 复制所需文件到 /app（单 COPY + 单 RUN 避免 BuildKit 多阶段缓存 bug）
+# dotglob 确保 standalone 内部的 .next/ 等点文件也被复制
+COPY --from=builder /app /app-build
+RUN shopt -s dotglob && \
+    cp -r /app-build/.next/standalone/* . && \
+    mkdir -p .next/static && \
+    cp -r /app-build/.next/static/* .next/static/ 2>/dev/null; \
+    cp -r /app-build/migrations . 2>/dev/null; \
+    rm -rf /app-build
 
 # Python 沙箱依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \

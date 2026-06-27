@@ -78,8 +78,8 @@ export function MessageList({
   const showThinking = isStreaming && lastMsg?.role === "user" && stepsAllDone;
 
   return (
-    <div className="px-4 py-6">
-      <div className="max-w-3xl mx-auto space-y-5">
+    <div className="px-6 py-6">
+      <div className="max-w-4xl mx-auto space-y-5">
         {messages.length > 0 &&
           messages.map((msg, i) => {
             const isUser = msg.role === "user";
@@ -116,7 +116,28 @@ export function MessageList({
                   >
                     {isUser ? "U" : <Bot className="w-4 h-4" strokeWidth={2.5} />}
                   </div>
-                  <div className={`flex flex-col ${isUser ? "items-end" : "items-start"} max-w-[80%]`}>
+                  <div className={`flex flex-col ${isUser ? "items-end" : "items-start"} max-w-[85%]`}>
+                    {/* 用户图片缩略图 */}
+                    {isUser && msg.images && msg.images.length > 0 && (
+                      <div className="flex gap-1.5 mb-1.5 flex-wrap justify-end">
+                        {msg.images.map((img, j) => (
+                          <a
+                            key={j}
+                            href={img.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-20 h-20 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                            style={{ border: "1px solid var(--border-subtle)" }}
+                          >
+                            <img
+                              src={img.url}
+                              alt={img.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     {msg.content && (
                       <div
                         className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
@@ -185,7 +206,7 @@ export function MessageList({
             <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-purple-500 to-pink-500 shadow-sm">
               <Bot className="w-4 h-4 text-white" strokeWidth={2.5} />
             </div>
-            <div className="flex flex-col items-start max-w-[75%]">
+            <div className="flex flex-col items-start max-w-[85%]">
               <div
                 className="rounded-2xl rounded-tl-sm px-3.5 py-3 shadow-sm"
                 style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}

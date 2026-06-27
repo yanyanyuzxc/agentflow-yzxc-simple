@@ -20,6 +20,7 @@ export interface StepSlice {
   appendAnswerChunk: (stepId: string, content: string) => void;
   finalizeStep: (stepId: string) => void;
   markStepError: (stepId: string, error: string) => void;
+  setSteps: (steps: StreamingAgentStep[]) => void;
   resetSteps: () => void;
   removeAnswerSteps: () => void;
 }
@@ -97,6 +98,8 @@ export const createStepSlice: StateCreator<ChatStore, [["zustand/devtools", neve
       ),
     })),
 
+  /** 从历史消息恢复步骤（刷新/切换对话后） */
+  setSteps: (steps: StreamingAgentStep[]) => set({ agentSteps: steps }),
   resetSteps: () => set({ ...initial }),
 
   removeAnswerSteps: () =>

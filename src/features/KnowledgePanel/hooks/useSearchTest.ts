@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
 import { documentService } from "@/services/documentService";
-import type { SearchResponse } from "@/types/api";
+import type { SearchResponse, SearchMode } from "@/types/api";
 
 export function useSearchTest() {
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<SearchMode>("hybrid");
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,10 +17,10 @@ export function useSearchTest() {
       const res = await documentService.search({
         query: query.trim(),
         limit: 5,
-        threshold: 0.3,
-        mode: "hybrid",
-        useReranker: true,
-        useExpansion: true,
+        threshold: mode === "keyword" ? 0.1 : 0.3,
+        mode,
+        useReranker: mode !== "keyword",
+        useExpansion: mode !== "keyword",
       });
       setResults(res);
     } catch {
@@ -27,7 +28,7 @@ export function useSearchTest() {
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, [query, mode]);
 
-  return { query, setQuery, results, loading, error, handleSearch };
+  return { query, setQuery, mode, setMode, results, loading, error, handleSearch };
 }

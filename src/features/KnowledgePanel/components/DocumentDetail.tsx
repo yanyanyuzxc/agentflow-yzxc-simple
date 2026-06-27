@@ -1,6 +1,9 @@
 "use client";
 
+import { Trash2, Layers, Clock } from "lucide-react";
 import { useDocumentDetail } from "../hooks/useDocumentDetail";
+import { formatSize, formatDate } from "@/lib/format";
+import { getFileTypeStyle } from "@/lib/fileType";
 import type { Document } from "@/types/models";
 
 export function DocumentDetail({
@@ -13,50 +16,108 @@ export function DocumentDetail({
   onDeleted: () => void;
 }) {
   const { detail, loading, error, deleting, showContent, setShowContent, handleDelete } = useDocumentDetail(doc, onDeleted);
+  const typeStyle = getFileTypeStyle(doc.file_type);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100">
-        <button onClick={onBack} className="text-gray-400 hover:text-gray-600 text-sm">←</button>
-        <h3 className="text-xs font-medium text-gray-700 truncate flex-1">{doc.title}</h3>
-        <button onClick={handleDelete} disabled={deleting} className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50">
+    <div className="flex flex-col">
+      {/* 标题行 */}
+      <div className="flex items-start gap-4 mb-6">
+        <div
+          className="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center"
+          style={{ background: typeStyle.bg, color: typeStyle.color }}
+        >
+          {typeStyle.icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[15px] font-semibold leading-snug" style={{ color: "var(--text-primary)" }}>
+            {doc.title}
+          </h2>
+          <div className="flex items-center gap-3 mt-1.5 text-[12px]" style={{ color: "var(--text-tertiary)" }}>
+            <span
+              className="px-1.5 py-0.5 rounded font-medium"
+              style={{ color: typeStyle.color, background: typeStyle.bg }}
+            >
+              {doc.file_type?.toUpperCase() ?? "?"}
+            </span>
+            <span className="flex items-center gap-1">
+              <Layers className="w-3 h-3" />
+              {doc.chunk_count} 片段
+            </span>
+            {doc.file_size != null && doc.file_size > 0 && (
+              <span>{formatSize(doc.file_size)}</span>
+            )}
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatDate(doc.created_at)}
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-200 disabled:opacity-40"
+          style={{ color: "var(--text-tertiary)" }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--bg-hover)";
+            e.currentTarget.style.color = "#dc2626";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--text-tertiary)";
+          }}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
           {deleting ? "删除中..." : "删除"}
         </button>
       </div>
 
-      {/* Meta */}
-      <div className="shrink-0 px-3 py-2 border-b border-gray-50">
-        <div className="flex items-center gap-3 text-[11px] text-gray-400">
-          <span>📄 {doc.file_type?.toUpperCase() ?? "未知"}</span>
-          {doc.file_size != null && doc.file_size > 0 && (
-            <span>
-              {doc.file_size > 1024 * 1024 ? `${(doc.file_size / (1024 * 1024)).toFixed(1)} MB` : `${(doc.file_size / 1024).toFixed(1)} KB`}
-            </span>
-          )}
-          <span>{doc.chunk_count} 片段</span>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* 内容 */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ background: "var(--bg-panel)", border: "1px solid var(--border-subtle)" }}
+      >
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+          <div className="flex items-center justify-center py-16">
+            <div
+              className="w-6 h-6 rounded-full border-[3px] animate-spin"
+              style={{ borderColor: "var(--border-default)", borderTopColor: "var(--brand-500)" }}
+            />
           </div>
         ) : error ? (
-          <div className="p-4 text-center"><p className="text-xs text-red-500">{error}</p></div>
+          <div className="py-12 text-center">
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{error}</p>
+          </div>
         ) : detail ? (
-          <div className="p-3">
-            <button onClick={() => setShowContent(!showContent)} className="text-xs text-blue-500 hover:underline mb-2">
-              {showContent ? "收起内容" : "查看原文"}
-            </button>
+          <div>
+            <div
+              className="flex items-center justify-between px-4 py-2.5"
+              style={{ borderBottom: "1px solid var(--border-subtle)" }}
+            >
+              <span className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+                共 {detail.chunkCount} 个文本片段
+              </span>
+              <button
+                onClick={() => setShowContent(!showContent)}
+                className="text-[12px] font-medium transition-colors"
+                style={{ color: "var(--brand-500)" }}
+              >
+                {showContent ? "收起内容" : "查看原文"}
+              </button>
+            </div>
             {showContent && (
-              <pre className="text-xs text-gray-600 whitespace-pre-wrap break-words bg-gray-50 rounded-lg p-3 mb-3 max-h-60 overflow-y-auto">
-                {detail.content}
-              </pre>
+              <div className="p-4">
+                <pre
+                  className="text-[13px] leading-relaxed whitespace-pre-wrap break-words rounded-lg p-4 max-h-80 overflow-y-auto"
+                  style={{
+                    background: "var(--bg-app)",
+                    color: "var(--text-secondary)",
+                    border: "1px solid var(--border-subtle)",
+                  }}
+                >
+                  {detail.content}
+                </pre>
+              </div>
             )}
-            <div className="text-[11px] text-gray-400">共 {detail.chunkCount} 个文本片段</div>
           </div>
         ) : null}
       </div>

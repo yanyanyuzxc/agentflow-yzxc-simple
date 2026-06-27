@@ -21,8 +21,8 @@ export async function middleware(request: NextRequest) {
   const start = Date.now();
   const pathname = request.nextUrl.pathname;
 
-  // 白名单：auth 接口不需要 JWT
-  if (pathname.startsWith("/api/auth/")) {
+  // 白名单：auth 接口和图片服务不需要 JWT
+  if (pathname.startsWith("/api/auth/") || pathname.startsWith("/api/images/")) {
     const res = NextResponse.next();
     console.log(`[api] ${request.method} ${pathname} ${res.status} ${Date.now() - start}ms`);
     return res;

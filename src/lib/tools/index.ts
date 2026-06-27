@@ -4,7 +4,9 @@ import { getTimeTool } from "./get-time";
 import { createSearchDocsTool } from "./search-docs";
 import { createSaveMemoryTool } from "./save-memory";
 import { webSearchTool } from "./web-search";
+import { crawlPageTool } from "./crawl-page";
 import { runPythonTool } from "./run-python";
+import { seeImageTool } from "./see-image";
 
 // ==================== 导出 ====================
 
@@ -14,7 +16,9 @@ export { getTimeTool } from "./get-time";
 export { createSearchDocsTool } from "./search-docs";
 export { createSaveMemoryTool } from "./save-memory";
 export { webSearchTool } from "./web-search";
+export { crawlPageTool } from "./crawl-page";
 export { runPythonTool } from "./run-python";
+export { seeImageTool } from "./see-image";
 
 // ==================== ToolRegistry ====================
 
@@ -43,6 +47,13 @@ export class ToolRegistry {
     return this;
   }
 
+  /** 移除之前注册的工具。不抛异常，静默处理不存在的情况。 */
+  unregister(source: ToolSource): this {
+    const idx = this.sources.lastIndexOf(source);
+    if (idx !== -1) this.sources.splice(idx, 1);
+    return this;
+  }
+
   /** 为指定用户构建 LangChain 工具列表 */
   build(userId: number): StructuredTool[] {
     return this.sources.map((src) => {
@@ -61,7 +72,9 @@ export class ToolRegistry {
       ToolRegistry._default = new ToolRegistry()
         .register(getTimeTool)
         .register(webSearchTool)
+        .register(crawlPageTool)
         .register(runPythonTool)
+        .register(seeImageTool)
         .register((uid) => createSearchDocsTool(uid))
         .register((uid) => createSaveMemoryTool(uid));
     }
