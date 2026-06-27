@@ -70,7 +70,10 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
           {error}
         </div>
       )}
-
+      
+      {
+        /* 登录表单 */
+      }
       {/* Forms */}
       {mode === "login" ? (
         <LoginForm onSubmit={handleLogin} loading={loading} />
