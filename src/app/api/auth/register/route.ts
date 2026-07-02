@@ -43,7 +43,8 @@ export async function POST(req: Request) {
     return resOk({ user, token: accessToken }, 201, { headers });
   } catch (error) {
     if (error instanceof Response) throw error;
-    logger.error("[auth] register failed", { error: (error as Error).message });
-    return resErr(500, "服务器内部错误");
+    const msg = (error as Error).message || String(error);
+    logger.error("[auth] register failed", { error: msg });
+    return resErr(500, `服务器内部错误: ${msg}`);
   }
 }
