@@ -3,31 +3,60 @@
 import { useCallback, useEffect, useState } from "react";
 
 const STORAGE_KEY = "theme";
+type ThemeMode = "system" | "light" | "dark";
 
-function getStored(): "light" | "dark" {
-  if (typeof window === "undefined") return "light";
-  return (localStorage.getItem(STORAGE_KEY) as "light" | "dark") ?? "light";
+function getStored(): ThemeMode {
+  if (typeof window === "undefined") return "system";
+  return (localStorage.getItem(STORAGE_KEY) as ThemeMode) ?? "system";
 }
 
-function apply(theme: "light" | "dark") {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-  localStorage.setItem(STORAGE_KEY, theme);
+function resolveEffective(mode: ThemeMode): "light" | "dark" {
+  if (mode === "system") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return mode;
 }
+
+function apply(mode: ThemeMode) {
+  localStorage.setItem(STORAGE_KEY, mode);
+  const effective = resolveEffective(mode);
+  document.documentElement.classList.toggle("dark", effective === "dark");
+}
+
+const LABELS: Record<ThemeMode, string> = {
+  system: "跟随系统",
+  light: "亮色",
+  dark: "暗色",
+};
+
+const NEXT: Record<ThemeMode, ThemeMode> = {
+  system: "light",
+  light: "dark",
+  dark: "system",
+};
 
 export function useTheme() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [mode, setMode] = useState<ThemeMode>("system");
 
   useEffect(() => {
-    setTheme(getStored());
+    setMode(getStored());
   }, []);
 
   useEffect(() => {
-    apply(theme);
-  }, [theme]);
+    apply(mode);
+  }, [mode]);
 
-  const toggle = useCallback(() => {
-    setTheme((t) => (t === "light" ? "dark" : "light"));
+  // 监听系统主题变化（仅在 system 模式下生效）
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => { if (mode === "system") apply("system"); };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [mode]);
+
+  const cycle = useCallback(() => {
+    setMode((m) => NEXT[m]);
   }, []);
 
-  return { theme, toggle };
+  return { mode, cycle, label: LABELS[mode] };
 }

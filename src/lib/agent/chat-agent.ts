@@ -20,6 +20,7 @@ import { AgentConfig } from "./config";
 import { ToolKit } from "./toolkit";
 import { CheckpointManager } from "./checkpoint";
 import { buildSystemPrompt } from "./prompt";
+import { logger } from "@/lib/log";
 
 // ==================== 常量 ====================
 
@@ -45,7 +46,7 @@ async function withRetry<T>(fn: () => Promise<T>, label = "LLM"): Promise<T> {
     } catch (e) {
       if (attempt < maxRetries && isRetryable(e)) {
         const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-        console.warn(`[ChatAgent] ${label} 失败 (尝试 ${attempt + 1}/${maxRetries + 1})，${delay}ms 后重试:`, (e as Error).message);
+        logger.warn(`[ChatAgent] ${label} 失败 (尝试 ${attempt + 1}/${maxRetries + 1})，${delay}ms 后重试`, { error: (e as Error).message });
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }
@@ -85,7 +86,7 @@ async function compressMessages(
 
   if (toCompress.length < 4) return messages;
 
-  console.warn(`[ChatAgent] 上下文 ${tokens} tokens > ${COMPRESS_THRESHOLD}，压缩 ${toCompress.length} 条旧消息`);
+  logger.info(`[ChatAgent] 上下文压缩`, { tokens, threshold: COMPRESS_THRESHOLD, messages: toCompress.length });
 
   try {
     const compressPrompt = [
@@ -109,7 +110,7 @@ async function compressMessages(
       ...toKeep,
     ];
   } catch (e) {
-    console.warn("[ChatAgent] 上下文压缩失败，保持原消息:", (e as Error).message);
+    logger.warn("[ChatAgent] 上下文压缩失败，保持原消息", { error: (e as Error).message });
     return messages;
   }
 }
@@ -167,6 +168,8 @@ export class ChatAgent {
     historyMsgCount: number;
     /** 运行时禁用的工具列表（优先级高于 config.disabledTools） */
     disabledTools?: string[];
+    /** token 级流式回调：每收到一个 token 就调用 */
+    onToken?: (token: string) => void;
   } = { historyMsgCount: 0 };
 
   constructor(
@@ -226,8 +229,6 @@ export class ChatAgent {
           .slice(self._run.historyMsgCount)
           .filter((m) => AIMessage.isInstance(m) && (m as AIMessage).tool_calls?.length)
           .length;
-        console.warn(`[ChatAgent] agent 节点进入: round=${toolCallRounds}, msgs=${state.messages.length}`);
-
         // 合并运行时 + 配置层的禁用工具列表
         const disabledTools = [
           ...(self._run.disabledTools ?? []),
@@ -247,7 +248,13 @@ export class ChatAgent {
           ].join("\n\n");
           const systemMsg = new SystemMessage(forceStop);
           const compressed = await compressMessages(state.messages, llm);
-          const response = await withRetry(() => llm.invoke([systemMsg, ...compressed]), "llm");
+          const fChunks: AIMessageChunk[] = [];
+          const fStream = await llm.stream([systemMsg, ...compressed]);
+          for await (const chunk of fStream) {
+            if (chunk.content) self._run.onToken?.(chunk.content as string);
+            fChunks.push(chunk);
+          }
+          const response = fChunks.reduce((acc, c) => acc.concat(c));
           return { messages: [response] };
         }
 
@@ -256,33 +263,38 @@ export class ChatAgent {
           ? tools.filter((t) => !disabledTools.includes(t.name))
           : tools;
         const llmWithTools = llm.bindTools(activeTools);
-        const prompt = self.config.systemPrompt ?? await buildSystemPrompt(_userId);
-        const systemMsg = new SystemMessage(prompt);
+        const basePrompt = self.config.systemPrompt ?? await buildSystemPrompt(_userId);
+        // 收敛信号：渐进式提醒 LLM 适可而止
+        let finalPrompt = basePrompt;
+        if (toolCallRounds >= 2 && toolCallRounds < 5) {
+          finalPrompt = basePrompt + `\n\n## 收敛提醒\n你已经进行了 ${toolCallRounds} 轮工具调用。如果现有信息已足够回答用户问题，请直接给出答案，不要继续搜索。只有在确实缺少关键信息时才追加搜索。`;
+        } else if (toolCallRounds >= 5) {
+          finalPrompt = basePrompt + `\n\n## ⚠️ 强制收敛\n你已经进行了 ${toolCallRounds} 轮工具调用，接近上限 ${MAX_TOOL_ROUNDS} 轮。必须尽快基于现有信息给出答案。不要追求完美——有据可查即可。`;
+        }
+        const systemMsg = new SystemMessage(finalPrompt);
 
         const compressed = await compressMessages(state.messages, llm);
 
-        console.warn(`[ChatAgent] agent 节点: 开始 invoke, msgs=${compressed.length}`);
         let response: AIMessage;
         try {
-          response = await withRetry(
-            () => llmWithTools.invoke([systemMsg, ...compressed]),
-            "llm",
-          );
-          console.warn(`[ChatAgent] agent 节点: invoke 成功`);
+          const sChunks: AIMessageChunk[] = [];
+          const sStream = await llmWithTools.stream([systemMsg, ...compressed]);
+          for await (const chunk of sStream) {
+            if (chunk.content) self._run.onToken?.(chunk.content as string);
+            sChunks.push(chunk);
+          }
+          response = sChunks.reduce((acc, c) => acc.concat(c));
         } catch (e) {
-          console.error(`[ChatAgent] agent 节点: invoke 失败:`, (e as Error).message);
+          logger.error(`[ChatAgent] agent 节点: stream 失败`, { error: (e as Error).message });
           throw e;
         }
 
         // DeepSeek XML 工具调用解析
         const responseContent = (response.content as string) || "";
         const hasParsedTools = !!(response as AIMessage).tool_calls?.length;
-        console.warn(`[ChatAgent] agent 节点返回: tool_calls=${(response as AIMessage).tool_calls?.length || 0}, content_len=${responseContent.length}, hasXML=${hasToolCallMarkup(responseContent)}`);
         if (hasToolCallMarkup(responseContent)) {
           const xmlParsed = parseXmlToolCalls(responseContent);
           if (xmlParsed.length > 0) {
-            console.warn(`[ChatAgent] 从 XML 解析到 ${xmlParsed.length} 个 tool_calls，` +
-              `原有 tool_calls=${(response as AIMessage).tool_calls?.length || 0}`);
             const merged = [...((response as AIMessage).tool_calls || []), ...xmlParsed];
             const seen = new Set<string>();
             const unique = merged.filter((tc) => {
@@ -300,49 +312,11 @@ export class ChatAgent {
           }
         }
 
-        // 第一轮拦截：LLM 没调工具就直接回答 → escalating retry
-        if (toolCallRounds === 0) {
-          const userMsg = state.messages.find((m) => m instanceof HumanMessage);
-          const question = ((userMsg?.content as string) || "").trim();
-          const trivialPatterns = /^(你好|hi|hello|hey|谢谢|再见|bye|好的|ok|嗯|哦|哈|啊|额|\?$|！$)/i;
-          const needsResearch = question.length > 6 && !trivialPatterns.test(question);
-
-          if (needsResearch) {
-            console.warn("[ChatAgent] 第一轮未调工具，启动 escalating retry:", question.slice(0, 50));
-            const forceMessages = [
-              "⚠️ 你必须先调用 web_search 搜索最新信息，然后再回答。不要跳过搜索步骤直接编造答案。",
-              "⚠️⚠️ 你再次跳过了搜索。这是严重错误。必须调用 web_search 或 search_docs 获取真实信息。不搜索直接回答 = 编造。",
-            ];
-
-            for (let attempt = 0; attempt < forceMessages.length; attempt++) {
-              if ((response as AIMessage).tool_calls?.length) break;
-              console.warn("[ChatAgent] retry %d/2: LLM 仍未调工具，升级警告", attempt + 1);
-              const forceMsg = new SystemMessage(forceMessages[attempt]);
-              response = await withRetry(
-                () => llmWithTools.invoke([systemMsg, forceMsg, ...compressed]),
-                "llm",
-              );
-            }
-          }
-        }
-
         return { messages: [response] };
       })
       .addNode("tools", async (state: typeof MessagesAnnotation.State) => {
         const last = state.messages[state.messages.length - 1] as AIMessage;
         let toolCalls = last.tool_calls ?? [];
-
-        // 兜底：如果 agent 节点没解析成功，tools 节点再试 XML 解析
-        if (toolCalls.length === 0) {
-          const lastContent = (last.content as string) || "";
-          if (hasToolCallMarkup(lastContent)) {
-            const parsed = parseXmlToolCalls(lastContent);
-            if (parsed.length > 0) {
-              console.warn(`[ChatAgent] tools 节点兜底解析到 ${parsed.length} 个 tool_calls`);
-              toolCalls = parsed;
-            }
-          }
-        }
 
         if (toolCalls.length === 0) return { messages: [] };
 
@@ -395,23 +369,44 @@ export class ChatAgent {
       .addEdge("tools", "agent");
   }
 
+  // ==================== 事件构建辅助 ====================
+
+  /** 将 tool_calls 按工具名分组，处理 args 解析 */
+  private static _groupToolCalls(toolCalls: any[]): Map<string, { args: Record<string, unknown>[] }> {
+    const groups = new Map<string, { args: Record<string, unknown>[] }>();
+    for (const tc of toolCalls) {
+      const name = tc.name;
+      if (!name) continue;
+      if (!groups.has(name)) groups.set(name, { args: [] });
+      let args: Record<string, unknown> = {};
+      try { args = typeof tc.args === "string" ? JSON.parse(tc.args) : (tc.args ?? {}); } catch { /* keep {} */ }
+      groups.get(name)!.args.push(args);
+    }
+    return groups;
+  }
+
   // ==================== 流式执行 ====================
 
   async *runStream(
     question: string,
     options?: AgentRunOptions,
   ): AsyncGenerator<SSEEvent> {
+    const t0 = performance.now();
     const { threadId, resume, userId = 1, history, images, disabledTools } = options ?? {};
+
+    // token 缓冲区：agent 节点流式推送，runStream 主循环排空
+    const pendingTokens: string[] = [];
 
     // 设置瞬态运行上下文（agent 节点闭包中读取）
     this._run = {
       historyMsgCount: history?.length ?? 0,
       disabledTools,
+      onToken: (token) => { pendingTokens.push(token); },
     };
 
-    // DB 加载了历史 → 清除旧检查点
-    const hasHistory = history && history.length > 0;
-    if (hasHistory && threadId) {
+    // 非 resume 模式 → 清除旧检查点，确保每次对话从干净状态开始
+    // 不清会导致 LangGraph 尝试 resume 旧 thread 状态 → 冲突卡死
+    if (threadId && !resume) {
       await this.checkpointManager.clearThread(threadId);
     }
 
@@ -437,70 +432,72 @@ export class ChatAgent {
 
     const runId = `${Date.now().toString(36)}`;
     let stepCounter = 0;
+    let roundCounter = 0;
     const sid = () => `${runId}_${++stepCounter}`;
 
     const stream = await graph.stream(input, {
       ...config,
-      streamMode: "messages",
+      streamMode: "updates" as any,
       recursionLimit: 25,
     });
 
     try {
       for await (const rawChunk of stream) {
-        const msg = Array.isArray(rawChunk) ? rawChunk[0] : rawChunk;
+        // streamMode: "updates" → 每个 chunk 是 { nodeName: { messages: [...] } }
+        const nodeName = Object.keys(rawChunk as Record<string, unknown>)[0];
+        const nodeOutput = (rawChunk as Record<string, unknown>)[nodeName] as { messages?: BaseMessage[] };
+        const messages = nodeOutput?.messages ?? [];
 
-        const isAIChunk = AIMessageChunk.isInstance(msg);
-        const isAIMsg = !isAIChunk && AIMessage.isInstance(msg);
-        const isToolMsg = msg instanceof ToolMessage;
+        // agent 节点 → LLM 思考 + 决策（可能含 tool_calls）
+        if (nodeName === "agent") {
+          for (const msg of messages) {
+            const ai = msg as AIMessage;
+            const toolCalls = ai.tool_calls;
 
-        if (isToolMsg) {
-          const tm = msg as ToolMessage;
-          const os = sid();
-          yield { event: "step_start", data: { step_id: os, type: "observation", label: `${tm.name ?? "tool"} 返回` } } as SSEEvent;
-          yield { event: "observation", data: { step_id: os, name: tm.name ?? "tool", result: (tm.content as string).slice(0, 600) } } as SSEEvent;
-          yield { event: "step_end", data: { step_id: os } } as SSEEvent;
-          continue;
-        }
-
-        if (isAIChunk || isAIMsg) {
-          const ai = msg as AIMessage;
-          const toolCalls = isAIChunk
-            ? (msg as AIMessageChunk).tool_call_chunks
-            : ai.tool_calls;
-
-          // 工具调用 — 只用完整 AIMessage，按工具名分组
-          if (!isAIChunk && toolCalls?.length) {
-            const tcGroups = new Map<string, { args: Record<string, unknown>[] }>();
-            for (const tc of toolCalls) {
-              const tcName = (tc as any).name;
-              const tcArgs = (tc as any).args ?? "{}";
-              if (!tcName) continue;
-              if (!tcGroups.has(tcName)) tcGroups.set(tcName, { args: [] });
-              let args: Record<string, unknown> = {};
-              try { args = typeof tcArgs === "string" ? JSON.parse(tcArgs) : tcArgs; } catch { /* keep {} */ }
-              tcGroups.get(tcName)!.args.push(args);
-            }
-            for (const [name, group] of tcGroups) {
-              const tcs = sid();
-              const suffix = group.args.length > 1 ? ` (${group.args.length}次)` : "";
-              yield { event: "step_start", data: { step_id: tcs, type: "tool_call", label: `调用 ${name}${suffix}` } } as SSEEvent;
-              const displayArgs = group.args.length === 1 ? group.args[0] : group.args;
-              yield { event: "tool_call", data: { step_id: tcs, name, args: displayArgs } } as SSEEvent;
-              yield { event: "step_end", data: { step_id: tcs } } as SSEEvent;
+            if (toolCalls?.length) {
+              // 有工具调用 → pendingTokens 是思考文字，丢弃
+              pendingTokens.length = 0;
+              roundCounter++;
+              // 轮次标识
+              const rs = sid();
+              yield { event: "step_start", data: { step_id: rs, type: "thought", label: `🔄 第 ${roundCounter} 轮` } } as SSEEvent;
+              yield { event: "thought", data: { step_id: rs, content: `思考中...` } } as SSEEvent;
+              // 按工具名分组输出
+              for (const [name, group] of ChatAgent._groupToolCalls(toolCalls as any)) {
+                const tcs = sid();
+                const suffix = group.args.length > 1 ? ` (${group.args.length}次)` : "";
+                yield { event: "step_start", data: { step_id: tcs, type: "tool_call", label: `调用 ${name}${suffix}` } } as SSEEvent;
+                const displayArgs = group.args.length === 1 ? group.args[0] : group.args;
+                yield { event: "tool_call", data: { step_id: tcs, name, args: displayArgs } } as SSEEvent;
+                yield { event: "step_end", data: { step_id: tcs } } as SSEEvent;
+              }
+              yield { event: "step_end", data: { step_id: rs } } as SSEEvent;
+            } else {
+              // 最终回答：优先流式 token，fallback 完整 content
+              if (pendingTokens.length > 0) {
+                for (const token of pendingTokens) {
+                  yield { event: "message_chunk", data: { content: token } };
+                }
+                pendingTokens.length = 0;
+              } else {
+                const content = (ai.content as string) || "";
+                if (content && !hasToolCallMarkup(content)) {
+                  yield { event: "message_chunk", data: { content } };
+                }
+              }
             }
           }
+        }
 
-          // 文字输出 → 拦截 XML 标记
-          const content = (ai.content as string) || "";
-          const blocked = hasToolCallMarkup(content)
-            || (isAIChunk && !!(msg as AIMessageChunk).tool_call_chunks?.length)
-            || (!isAIChunk && !!(ai as AIMessage).tool_calls?.length);
-          if (content && !blocked) {
-            yield { event: "message_chunk", data: { content } };
-          } else if (content && blocked) {
-            const reason = hasToolCallMarkup(content) ? "XML" :
-              (isAIChunk && (msg as AIMessageChunk).tool_call_chunks?.length) ? "chunk_tc" : "msg_tc";
-            console.warn(`[ChatAgent] 拦截 ${reason} content:`, content.slice(0, 120));
+        // tools 节点 → 工具执行结果
+        if (nodeName === "tools") {
+          for (const msg of messages) {
+            const tm = msg as ToolMessage;
+            const os = sid();
+            const rawContent = (tm.content as string) || "";
+            yield { event: "step_start", data: { step_id: os, type: "observation", label: `${tm.name ?? "tool"} 返回` } } as SSEEvent;
+            yield { event: "observation", data: { step_id: os, name: tm.name ?? "tool", result: rawContent.slice(0, 200) } } as SSEEvent;
+            yield { event: "step_end", data: { step_id: os } } as SSEEvent;
           }
         }
       }
@@ -513,7 +510,7 @@ export class ChatAgent {
           return;
         }
       }
-      yield { event: "done", data: {} };
+      yield { event: "done", data: { totalDurationMs: Math.round(performance.now() - t0) } };
     } catch (e) {
       yield { event: "error", data: { message: (e as Error).message } };
     } finally {

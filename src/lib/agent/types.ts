@@ -14,7 +14,7 @@ export type SSEEvent =
   | { event: "step_end"; data: { step_id: string } }
   | { event: "interrupt"; data: { interrupt_id: string; message: string; tool_name?: string } }
   | { event: "error"; data: { message: string } }
-  | { event: "done"; data: Record<string, never> };
+  | { event: "done"; data: { totalDurationMs: number } };
 
 /** 图片入参 */
 export interface ImageInput {

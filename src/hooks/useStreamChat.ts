@@ -79,16 +79,16 @@ function dispatch(
 
     case "done":
       store.setStreaming(false);
+      store.setTotalDurationMs(payload.totalDurationMs as number);
       break;
 
     default:
-      console.warn("[useStreamChat] unknown event:", event, payload);
+      break;
   }
 }
 
 async function persistAssistantMessage() {
   const latest = useChatStore.getState();
-  console.log("[done] persistAssistantMessage:", latest);
   const convId = latest.activeConversationId;
 
   // 找最后一条 assistant 消息（由 message_chunk 流式构建）
@@ -130,7 +130,7 @@ export function useStreamChat() {
   // false → onclose 负责保存（正常 done 或意外断连）
   const persistedRef = useRef(false);
 
-  const send = useCallback(async (question: string, images?: import("@/types/models").ImageAttachment[]) => {
+  const send = useCallback(async (question: string, images?: import("@/types/models").ImageAttachment[], documents?: import("@/types/models").DocumentAttachment[]) => {
     persistedRef.current = false;
     abortRef.current = new AbortController();
     const store = useChatStore.getState();
@@ -138,7 +138,7 @@ export function useStreamChat() {
     await fetchEventSource("/api/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-      body: JSON.stringify({ question, threadId: store.threadId, images, webSearchEnabled: store.webSearchEnabled }),
+      body: JSON.stringify({ question, threadId: store.threadId, images, documents, webSearchEnabled: store.webSearchEnabled, knowledgeBaseEnabled: store.knowledgeBaseEnabled }),
       signal: abortRef.current.signal,
       openWhenHidden: true,
 
@@ -148,9 +148,13 @@ export function useStreamChat() {
       },
 
       onclose() {
-        // 唯一持久化入口：正常 done / 意外断连 / onerror 抛错后
+        // 唯一持久化入口：正常 done / 意外断连 / onerror 后
         const cur = useChatStore.getState();
         if (!cur.isInterrupted && !persistedRef.current) {
+          // 仍在 streaming 状态 → 未收到 done 事件，流意外中断
+          if (cur.isStreaming) {
+            cur.setIncompleteAnswer(true);
+          }
           persistAssistantMessage().finally(() => cur.setStreaming(false));
         }
         // interrupt 或 abort 已保存 → 跳过
@@ -161,8 +165,6 @@ export function useStreamChat() {
         cur.setError(err.message);
         cur.setStreaming(false);
         // 不在这里 persist，交给 onclose 统一处理
-        // persistedRef 保持 false → onclose 会保存
-        throw err;
       },
     });
   }, []);
@@ -193,6 +195,9 @@ export function useStreamChat() {
       onclose() {
         const cur = useChatStore.getState();
         if (!cur.isInterrupted && !persistedRef.current) {
+          if (cur.isStreaming) {
+            cur.setIncompleteAnswer(true);
+          }
           persistAssistantMessage().finally(() => cur.setStreaming(false));
         } else {
           cur.setStreaming(false);
@@ -204,7 +209,6 @@ export function useStreamChat() {
         cur.setError(err.message);
         cur.setStreaming(false);
         // 交给 onclose 统一持久化
-        throw err;
       },
     });
   }, []);

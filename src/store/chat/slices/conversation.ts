@@ -9,6 +9,7 @@ export interface ConversationSlice {
   setConversations: (list: StoredConversation[]) => void;
   addConversation: (conv: StoredConversation) => void;
   removeConversation: (id: number) => void;
+  updateConversationTitle: (id: number, title: string) => void;
   setActiveConversationId: (id: number | null) => void;
   resetConversations: () => void;
 }
@@ -27,6 +28,12 @@ export const createConversationSlice: StateCreator<ChatStore, [["zustand/devtool
   removeConversation: (id) =>
     set((s) => ({
       conversations: s.conversations.filter((c) => c.id !== id),
+    })),
+  updateConversationTitle: (id, title) =>
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === id ? { ...c, title } : c,
+      ),
     })),
   setActiveConversationId: (id) => set({ activeConversationId: id }),
   resetConversations: () => set({ ...initial }),

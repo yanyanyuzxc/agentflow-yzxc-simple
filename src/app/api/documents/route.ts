@@ -2,13 +2,14 @@ import { chunkText } from "@/lib/rag";
 import { storeDocument, listDocuments } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { DocumentCreateInput, parseBody } from "@/lib/schemas";
-import { getOpenAI } from "@/lib/llm";
+import { getEmbeddingClient } from "@/lib/llm";
 import { resOk, resErr } from "@/lib/resp";
+import { logger } from "@/lib/log";
 
 export async function POST(request: Request) {
   try {
     const userId = requireAuth(request);
-    const openai = getOpenAI();
+    const openai = getEmbeddingClient();
     const body = await parseBody(request, DocumentCreateInput);
 
     const chunks = chunkText(body.text);
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     return resOk({ documentId: docId, totalChunks: chunks.length }, 201);
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("存储文档失败:", error);
+    logger.error("存储文档失败", { error: (error as Error).message });
     return resErr(500, "存储文档失败");
   }
 }
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
     return resOk(docs);
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("获取文档列表失败:", error);
+    logger.error("获取文档列表失败", { error: (error as Error).message });
     return resErr(500, "获取文档列表失败");
   }
 }

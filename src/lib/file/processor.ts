@@ -4,13 +4,14 @@ import { decode as iconvDecode } from "iconv-lite";
 
 // ==================== 类型 ====================
 
-export type SupportedFileType = "txt" | "md" | "pdf";
+export type SupportedFileType = "txt" | "md" | "pdf" | "docx";
 
 const SUPPORTED_TYPES: Record<string, SupportedFileType> = {
   ".txt": "txt",
   ".md": "md",
   ".markdown": "md",
   ".pdf": "pdf",
+  ".docx": "docx",
 };
 
 // ==================== 文本解码 ====================
@@ -48,7 +49,7 @@ export class FileProcessor {
 
   /** 支持的上传 accept 字符串 */
   get acceptTypes(): string {
-    return ".txt,.md,.markdown,.pdf";
+    return ".txt,.md,.markdown,.pdf,.docx";
   }
 
   /** 支持的扩展名列表 */
@@ -74,6 +75,11 @@ export class FileProcessor {
         const parser = new PDFParse({ data: buf });
         const result = await parser.getText();
         return result.text;
+      }
+      case "docx": {
+        const mammoth = await import("mammoth");
+        const result = await mammoth.extractRawText({ path: filePath });
+        return result.value;
       }
     }
   }

@@ -60,12 +60,22 @@ export interface ImageAttachment {
   question?: string; // 关于图片的问题
 }
 
+export interface DocumentAttachment {
+  name: string;       // 原始文件名
+  type: string;       // txt | md | pdf | docx
+  size: number;       // 字节
+  text: string;       // 解析后的纯文本
+  tokens: number;     // 估算 token 数
+  truncated: boolean; // 是否被截断
+}
+
 export interface Message {
   id: number;
   conversation_id: number;
   role: "user" | "assistant" | "tool" | "system";
   content: string;
   images?: ImageAttachment[];
+  documents?: DocumentAttachment[];
   tool_calls?: ToolCallPayload[];
   agent_steps?: string; // JSON-serialized AgentStep[]
   tokens?: number;

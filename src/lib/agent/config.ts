@@ -32,11 +32,11 @@ export class AgentConfig {
     disabledTools: string[];
   }>) {
     const env = getEnv();
-    this.apiKey = overrides?.apiKey ?? env.SILICONFLOW_API_KEY;
+    this.apiKey = overrides?.apiKey ?? env.LLM_API_KEY ?? env.SILICONFLOW_API_KEY;
     this.baseURL = overrides?.baseURL ?? env.LLM_BASE_URL ?? "https://api.siliconflow.cn/v1";
     this.model = overrides?.model ?? env.LLM_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash";
     this.embeddingModel = overrides?.embeddingModel ?? env.EMBEDDING_MODEL ?? "BAAI/bge-m3";
-    this.embeddingBaseURL = overrides?.embeddingBaseURL ?? env.LLM_BASE_URL ?? "https://api.siliconflow.cn/v1";
+    this.embeddingBaseURL = overrides?.embeddingBaseURL ?? env.EMBEDDING_BASE_URL ?? "https://api.siliconflow.cn/v1";
     this.dbUrl = overrides?.dbUrl ?? env.DATABASE_URL;
     this.interruptAfter = overrides?.interruptAfter ?? [];
     this.systemPrompt = overrides?.systemPrompt;

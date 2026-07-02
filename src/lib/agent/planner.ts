@@ -5,6 +5,7 @@ import type { SSEEvent } from "./types";
 import type { ExecutionPlan, PlanStep } from "./types";
 import { PLANNER_PROMPT, SEARCH_AGENT_PROMPT, ANALYST_AGENT_PROMPT, WRITER_AGENT_PROMPT, REVIEWER_AGENT_PROMPT } from "./prompts";
 import { getEnv } from "@/lib/env";
+import { logger } from "@/lib/log";
 
 /** 专用 Agent 的 system prompt 映射 */
 const ROLE_PROMPTS: Record<PlanStep["agent"], string> = {
@@ -84,13 +85,13 @@ export class Planner {
       const plan = this.parsePlan(text);
 
       if (plan.complexity !== "simple" && !this.validatePlan(plan)) {
-        console.warn("[Planner] 计划不合理，降级为简单模式");
+        logger.warn("[Planner] 计划不合理，降级为简单模式");
         return SIMPLE_PLAN;
       }
 
       return plan;
     } catch (e) {
-      console.warn("[Planner] LLM 调用失败，降级为简单模式:", (e as Error).message);
+      logger.warn("[Planner] LLM 调用失败，降级为简单模式", { error: (e as Error).message });
       return SIMPLE_PLAN;
     }
   }
@@ -107,7 +108,7 @@ export class Planner {
       const parsed = JSON.parse(jsonStr);
 
       if (!parsed.complexity || !Array.isArray(parsed.steps)) {
-        console.warn("[Planner] JSON 格式不完整，降级为简单模式:", jsonStr.slice(0, 200));
+        logger.warn("[Planner] JSON 格式不完整，降级为简单模式", { json: jsonStr.slice(0, 200) });
         return SIMPLE_PLAN;
       }
 
@@ -131,7 +132,7 @@ export class Planner {
         steps,
       };
     } catch {
-      console.warn("[Planner] JSON 解析失败，降级为简单模式:", jsonStr.slice(0, 200));
+      logger.warn("[Planner] JSON 解析失败，降级为简单模式", { json: jsonStr.slice(0, 200) });
       return SIMPLE_PLAN;
     }
   }
@@ -141,7 +142,7 @@ export class Planner {
     if (plan.steps.length === 0) return true;
 
     if (plan.steps.length > 10) {
-      console.warn("[Planner] 步骤过多:", plan.steps.length);
+      logger.warn("[Planner] 步骤过多", { count: plan.steps.length });
       return false;
     }
 
@@ -153,14 +154,14 @@ export class Planner {
       const agent = plan.steps[i].agent;
       if ((agent === "analyst" || agent === "writer")) {
         if (searchIndices.length === 0 || searchIndices[0] > i) {
-          console.warn(`[Planner] ${agent} 在步骤 ${i + 1}，但之前没有 search`);
+          logger.warn(`[Planner] ${agent} 在步骤 ${i + 1}，但之前没有 search`);
           return false;
         }
       }
     }
 
     if (plan.steps[0].agent === "reviewer") {
-      console.warn("[Planner] reviewer 不应作为第一步");
+      logger.warn("[Planner] reviewer 不应作为第一步");
       return false;
     }
 
@@ -276,13 +277,14 @@ export class Planner {
     userId: number,
     threadId?: string,
   ): AsyncGenerator<SSEEvent> {
+    const t0 = performance.now();
     const compacted = this.compactSteps(plan.steps);
     const stepAnswers: string[] = [];
     const totalSteps = compacted.length;
 
     if (totalSteps === 0) {
       yield { event: "message_chunk", data: { content: plan.reasoning } };
-      yield { event: "done", data: {} };
+      yield { event: "done", data: { totalDurationMs: Math.round(performance.now() - t0) } };
       return;
     }
 
@@ -380,7 +382,7 @@ export class Planner {
           }
         } catch (e) {
           const errMsg = (e as Error).message;
-          console.error(`[Planner] 步骤 ${i + 1} 失败 (尝试 ${retries + 1}/${MAX_STEP_RETRIES + 1}):`, errMsg);
+          logger.error(`[Planner] 步骤 ${i + 1} 失败`, { attempt: retries + 1, maxRetries: MAX_STEP_RETRIES + 1, error: errMsg });
           if (retries >= MAX_STEP_RETRIES) {
             stepContent = `(执行失败: ${errMsg})`;
             yield { event: "error", data: { message: `步骤 ${i + 1} 执行失败: ${errMsg}` } };
@@ -418,6 +420,6 @@ export class Planner {
       }
     }
 
-    yield { event: "done", data: {} };
+    yield { event: "done", data: { totalDurationMs: Math.round(performance.now() - t0) } };
   }
 }

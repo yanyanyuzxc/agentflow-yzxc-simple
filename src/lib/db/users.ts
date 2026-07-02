@@ -43,3 +43,35 @@ export async function getUserById(id: number): Promise<StoredUser | null> {
   );
   return result.rows[0] ?? null;
 }
+
+export async function updateUser(
+  id: number,
+  fields: { name?: string; email?: string; avatar?: string | null },
+): Promise<StoredUser | null> {
+  await initDB();
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  let i = 1;
+  if (fields.name !== undefined) { sets.push(`name = $${i++}`); vals.push(fields.name); }
+  if (fields.email !== undefined) { sets.push(`email = $${i++}`); vals.push(fields.email); }
+  if (fields.avatar !== undefined) { sets.push(`avatar = $${i++}`); vals.push(fields.avatar); }
+  if (sets.length === 0) return getUserById(id);
+  vals.push(id);
+  const result = await pool.query(
+    `UPDATE users SET ${sets.join(", ")} WHERE id = $${i} RETURNING id, name, email, avatar, created_at`,
+    vals,
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updatePassword(
+  id: number,
+  newHash: string,
+): Promise<boolean> {
+  await initDB();
+  const result = await pool.query(
+    "UPDATE users SET password_hash = $1 WHERE id = $2",
+    [newHash, id],
+  );
+  return (result.rowCount ?? 0) > 0;
+}

@@ -1,5 +1,6 @@
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { pool } from "@/lib/db/pool";
+import { logger } from "@/lib/log";
 
 /**
  * CheckpointManager — PostgresSaver 生命周期管理。
@@ -51,7 +52,7 @@ export class CheckpointManager {
         return;
       }
     } catch (e) {
-      console.warn("[Agent] PostgresSaver.deleteThread 失败，使用原始 SQL:", (e as Error).message);
+      logger.warn("[Agent] PostgresSaver.deleteThread 失败，使用原始 SQL", { error: (e as Error).message });
     }
 
     // 降级：直接用 app pool 清

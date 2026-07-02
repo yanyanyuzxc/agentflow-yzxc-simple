@@ -2,7 +2,7 @@ import { createStore } from "./middleware/createStore";
 
 interface UIState {
   showLeftPanel: boolean;
-  activePage: "chat" | "knowledge";
+  activePage: "chat" | "knowledge" | "settings";
   theme: "light" | "dark" | "system";
   dismissedBannerIds: string[];
 }

@@ -4,6 +4,7 @@ import { jwtVerify } from "jose";
 
 import { getEnv } from "@/lib/env";
 import { resErr } from "@/lib/resp";
+import { logger } from "@/lib/log";
 
 const ACCESS_SECRET = new TextEncoder().encode(getEnv().JWT_ACCESS_SECRET);
 
@@ -24,7 +25,7 @@ export async function middleware(request: NextRequest) {
   // 白名单：auth 接口和图片服务不需要 JWT
   if (pathname.startsWith("/api/auth/") || pathname.startsWith("/api/images/")) {
     const res = NextResponse.next();
-    console.log(`[api] ${request.method} ${pathname} ${res.status} ${Date.now() - start}ms`);
+    logger.info(`[api] ${request.method} ${pathname} ${res.status} ${Date.now() - start}ms`);
     return res;
   }
 
@@ -36,19 +37,19 @@ export async function middleware(request: NextRequest) {
   const auth = request.headers.get("Authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token) {
-    console.log(`[api] ${request.method} ${pathname} 401 ${Date.now() - start}ms (未登录)`);
+    logger.warn(`[api] ${request.method} ${pathname} 401 ${Date.now() - start}ms (未登录)`);
     return resErr(401, "未登录");
   }
 
   const userId = await verifyToken(token);
   if (!userId) {
-    console.log(`[api] ${request.method} ${pathname} 401 ${Date.now() - start}ms (token无效)`);
+    logger.warn(`[api] ${request.method} ${pathname} 401 ${Date.now() - start}ms (token无效)`);
     return resErr(401, "token 无效或已过期");
   }
 
   const res = NextResponse.next();
   res.headers.set("x-user-id", String(userId));
-  console.log(`[api] ${request.method} ${pathname} ${res.status} ${Date.now() - start}ms uid=${userId}`);
+  logger.info(`[api] ${request.method} ${pathname} ${res.status} ${Date.now() - start}ms uid=${userId}`);
   return res;
 }
 

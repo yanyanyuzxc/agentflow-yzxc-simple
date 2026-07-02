@@ -21,6 +21,8 @@ services:
     container_name: chat-app
     ports:
       - "3000:3000"
+    volumes:
+      - uploads_data:/app/uploads
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/chat_embeddings
@@ -35,3 +37,4 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:

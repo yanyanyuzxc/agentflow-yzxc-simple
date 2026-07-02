@@ -75,7 +75,7 @@ async function searchTavily(
 
 // ==================== Bing（兜底） ====================
 
-function cleanHtml(text: string): string {
+export function cleanHtml(text: string): string {
   return text
     .replace(/<[^>]*>/g, "")
     .replace(/&amp;/g, "&")
@@ -90,7 +90,7 @@ function cleanHtml(text: string): string {
     .trim();
 }
 
-function parseBingResults(html: string, maxResults: number): SearchHit[] {
+export function parseBingResults(html: string, maxResults: number): SearchHit[] {
   const results: SearchHit[] = [];
   const algoRegex = /<li class="b_algo"[^>]*>([\s\S]*?)<\/li>/gi;
   let match;

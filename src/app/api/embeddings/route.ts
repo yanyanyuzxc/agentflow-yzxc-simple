@@ -1,11 +1,14 @@
 import { chunkText } from '@/lib/rag'
 import { EmbeddingInput, parseBody } from '@/lib/schemas'
-import { getOpenAI } from '@/lib/llm'
+import { getEmbeddingClient } from '@/lib/llm'
+import { requireAuth } from '@/lib/auth'
 import { resOk, resErr } from '@/lib/resp'
+import { logger } from "@/lib/log";
 
 export async function POST(request: Request) {
   try {
-    const openai = getOpenAI();
+    const userId = requireAuth(request);
+    const openai = getEmbeddingClient();
     const body = await parseBody(request, EmbeddingInput);
 
     const chunks = chunkText(body.text, { chunkSize: body.chunkSize, overlap: body.overlap })
@@ -44,7 +47,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error('生成 embedding 失败:', error)
+    logger.error('生成 embedding 失败', { error: (error as Error).message })
     return resErr(500, '生成向量失败，请检查 API 密钥和网络连接')
   }
 }

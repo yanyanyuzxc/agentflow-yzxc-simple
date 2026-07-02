@@ -62,6 +62,14 @@ export class ToolRegistry {
     });
   }
 
+  /** 返回所有已注册工具的名称列表 */
+  getNames(): string[] {
+    return this.sources.map((src) => {
+      const def = typeof src === "function" ? src(0) : src;
+      return def.name;
+    });
+  }
+
   // ==================== 默认实例 ====================
 
   private static _default: ToolRegistry | null = null;

@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
   Monitor, LogIn as LogInIcon, LogOut, Sun, Moon,
-  PanelLeftOpen, PanelLeftClose,
+  PanelLeftOpen, PanelLeftClose, Settings,
   MessageCircle, Database, FileText, Upload, Search, ArrowLeft,
 } from "lucide-react";
 import { ChatArea } from "@/features/ChatArea";
 import { ConversationList } from "@/features/ConversationList";
+import { UserSettings } from "@/features/UserSettings";
+import { ErrorBoundary } from "@/components/ui/ErrorFallback";
 import { useUserStore } from "@/store/user";
 import { authService } from "@/services/authService";
 import { useTheme } from "@/hooks/useTheme";
@@ -44,7 +46,7 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const user = useUserStore((s) => s.user);
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
-  const { theme, toggle: toggleTheme } = useTheme();
+  const { mode, cycle, label } = useTheme();
   const showLeftPanel = useUIStore((s) => s.showLeftPanel);
   const activePage = useUIStore((s) => s.activePage);
   const { toggleLeftPanel, setActivePage } = useUIStore.getState();
@@ -122,14 +124,14 @@ export default function Home() {
         )}
 
         <button
-          onClick={toggleTheme}
+          onClick={cycle}
           className="w-6 h-6 flex items-center justify-center rounded-md transition-colors"
           style={{ color: "var(--text-tertiary)" }}
-          title={theme === "dark" ? "切换亮色" : "切换暗色"}
+          title={label}
           onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
         >
-          {theme === "dark" ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
+          {mode === "system" ? <Monitor className="w-3 h-3" /> : mode === "dark" ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
         </button>
       </header>
 
@@ -168,6 +170,17 @@ export default function Home() {
               <Database className="w-4 h-4" strokeWidth={activePage === "knowledge" ? 2.5 : 1.5} />
               知识库
             </button>
+            <button
+              onClick={() => setActivePage("settings")}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-200"
+              style={{
+                color: activePage === "settings" ? "var(--brand-700)" : "var(--text-secondary)",
+                background: activePage === "settings" ? "var(--bg-active)" : "transparent",
+              }}
+            >
+              <Settings className="w-4 h-4" strokeWidth={activePage === "settings" ? 2.5 : 1.5} />
+              设置
+            </button>
           </nav>
 
           {/* Divider */}
@@ -175,7 +188,9 @@ export default function Home() {
 
           {/* Sidebar content based on active page */}
           {activePage === "chat" ? (
-            <ConversationList />
+            <ErrorBoundary variant="silent">
+              <ConversationList />
+            </ErrorBoundary>
           ) : (
             <div className="flex-1 overflow-y-auto px-3 py-3">
               <p className="text-[11px] font-medium mb-2 leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
@@ -228,15 +243,33 @@ export default function Home() {
             >
               <Database className="w-3.5 h-3.5" strokeWidth={activePage === "knowledge" ? 2.5 : 1.5} />
             </button>
+            <button
+              onClick={() => setActivePage("settings")}
+              className="w-6 h-6 flex items-center justify-center rounded-md transition-colors"
+              style={{ color: activePage === "settings" ? "var(--brand-600)" : "var(--text-tertiary)" }}
+              title="设置"
+            >
+              <Settings className="w-3.5 h-3.5" strokeWidth={activePage === "settings" ? 2.5 : 1.5} />
+            </button>
           </div>
         )}
 
         {/* Center */}
         <div className="flex-1 min-w-0 flex flex-col" style={{ background: "var(--bg-app)" }}>
-          {activePage === "chat" ? (
-            <ChatArea />
-          ) : (
-            <KnowledgePage />
+          {activePage === "chat" && (
+            <ErrorBoundary variant="silent">
+              <ChatArea />
+            </ErrorBoundary>
+          )}
+          {activePage === "knowledge" && (
+            <ErrorBoundary variant="silent">
+              <KnowledgePage />
+            </ErrorBoundary>
+          )}
+          {activePage === "settings" && (
+            <ErrorBoundary variant="silent">
+              <UserSettings onBack={() => setActivePage("chat")} />
+            </ErrorBoundary>
           )}
         </div>
       </main>

@@ -2,23 +2,24 @@ import { writeFile } from "fs/promises";
 import { join } from "path";
 import { chunkText } from "@/lib/rag";
 import { storeDocument } from "@/lib/db";
-import { getFileType, isFileTypeSupported, parseFile } from "@/lib/file";
+import { getFileType, parseFile } from "@/lib/file";
 import { requireAuth } from "@/lib/auth";
 import { getEmbeddings } from "@/lib/embedding-cache";
 import { resOk, resErr } from "@/lib/resp";
+import { logger } from "@/lib/log";
+import { DocumentUploadInput } from "@/lib/schemas";
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const UPLOAD_DIR = "uploads";
 
 export async function POST(request: Request) {
   try {
     const userId = requireAuth(request);
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-
-    if (!file) return resErr(400, "请选择文件");
-    if (!isFileTypeSupported(file.name)) return resErr(400, "不支持的文件格式，仅支持 .txt / .md / .pdf");
-    if (file.size > MAX_FILE_SIZE) return resErr(400, "文件超过 5MB 限制");
+    const parsed = DocumentUploadInput.safeParse({ file: formData.get("file") });
+    if (!parsed.success) {
+      return resErr(400, parsed.error.issues[0].message);
+    }
+    const file = parsed.data.file;
 
     const fileType = getFileType(file.name)!;
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     }, 201);
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("上传失败:", error);
+    logger.error("上传失败", { error: (error as Error).message });
     return resErr(500, "上传处理失败");
   }
 }

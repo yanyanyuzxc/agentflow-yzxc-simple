@@ -4,6 +4,7 @@ import { Trash2, Layers, Clock } from "lucide-react";
 import { useDocumentDetail } from "../hooks/useDocumentDetail";
 import { formatSize, formatDate } from "@/lib/format";
 import { getFileTypeStyle } from "@/lib/fileType";
+import { ErrorDisplay } from "@/components/ui/ErrorDisplay";
 import type { Document } from "@/types/models";
 
 export function DocumentDetail({
@@ -84,9 +85,7 @@ export function DocumentDetail({
             />
           </div>
         ) : error ? (
-          <div className="py-12 text-center">
-            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{error}</p>
-          </div>
+          <ErrorDisplay message={error} />
         ) : detail ? (
           <div>
             <div

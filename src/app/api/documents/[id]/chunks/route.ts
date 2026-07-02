@@ -1,6 +1,7 @@
 import { getDocumentChunks } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { resOk, resErr } from "@/lib/resp";
+import { logger } from "@/lib/log";
 
 export async function GET(
   req: Request,
@@ -25,7 +26,7 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("获取文档失败:", error);
+    logger.error("获取文档失败", { error: (error as Error).message });
     return resErr(500, "获取文档失败");
   }
 }

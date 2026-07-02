@@ -57,6 +57,8 @@ export function remainingTokens(key: string): number {
 // ==================== 预设限流配置 ====================
 
 export const RateLimits = {
+  /** 鉴权接口：5 req/min（防暴力破解） */
+  auth: { rpm: 5, label: "auth" } as RateLimitConfig,
   /** API 全局：60 req/min */
   api: { rpm: 60, label: "api" } as RateLimitConfig,
   /** Agent 调用：10 req/min（每次调用可能多次 LLM） */

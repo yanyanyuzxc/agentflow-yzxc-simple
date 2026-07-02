@@ -30,7 +30,10 @@ export interface RerankOptions {
 // ==================== Pipeline Config ====================
 
 export interface RagPipelineConfig {
-  apiKey?: string;
+  /** Chat API key（query expansion 用 LLM key） */
+  chatApiKey?: string;
+  /** Embedding/Rerank API key（走 SiliconFlow） */
+  embeddingApiKey?: string;
   /** Embedding 模型名（默认 BAAI/bge-m3） */
   embeddingModel?: string;
   /** Embedding API 地址 */

@@ -48,14 +48,28 @@ export async function apiClient<T>(
   const token = await getToken();
 
   async function doFetch(t: string | null): Promise<ApiResponse<T>> {
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...buildHeaders(t, options?.headers),
-      },
-    });
-    return res.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+    try {
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...buildHeaders(t, options?.headers),
+        },
+      });
+
+      // 先按 HTTP 状态码判断 401，避免 res.json() 解析失败
+      if (res.status === 401) {
+        return { code: 401, data: null as T, message: "未登录" };
+      }
+
+      return res.json();
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   let body = await doFetch(token);
@@ -66,9 +80,12 @@ export async function apiClient<T>(
     try {
       await authService.refresh();
       const newToken = await getToken();
-      body = await doFetch(newToken);
+      if (newToken) {
+        body = await doFetch(newToken);
+      }
     } catch {
-      // refresh 失败，使用原始错误
+      // refresh 失败，使用明确的消息
+      body = { code: 401, data: null as T, message: "登录已过期，请重新登录" };
     }
   }
 

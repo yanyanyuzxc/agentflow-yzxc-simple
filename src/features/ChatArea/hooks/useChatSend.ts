@@ -2,11 +2,11 @@ import { useCallback } from "react";
 import { useChatStore } from "@/store/chat/store";
 import { chatService } from "@/services/chatService";
 
-import type { ImageAttachment } from "@/types/models";
+import type { ImageAttachment, DocumentAttachment } from "@/types/models";
 
-export function useChatSend(send: (text: string, images?: ImageAttachment[]) => void) {
+export function useChatSend(send: (text: string, images?: ImageAttachment[], documents?: DocumentAttachment[]) => void) {
   return useCallback(
-    async (text: string, images?: ImageAttachment[]) => {
+    async (text: string, images?: ImageAttachment[], documents?: DocumentAttachment[]) => {
       const store = useChatStore.getState();
       if (store.isStreaming) return;
 
@@ -54,6 +54,7 @@ export function useChatSend(send: (text: string, images?: ImageAttachment[]) => 
         role: "user",
         content: text,
         images: images?.length ? images : undefined,
+        documents: documents?.length ? documents : undefined,
         created_at: new Date().toISOString(),
       });
 
@@ -64,10 +65,26 @@ export function useChatSend(send: (text: string, images?: ImageAttachment[]) => 
           useChatStore.getState().setMessages(
             useChatStore.getState().messages.map((m) => (m.id === tempId ? { ...m, id: saved.id } : m)),
           );
-        } catch { /* 消息保存失败不影响发送 */ }
+          // 首次发消息 → 用问题前 30 字自动命名
+          const conv = useChatStore.getState().conversations.find((c) => c.id === conversationId);
+          if (conv && conv.title === "新对话") {
+            const autoTitle = text.trim().slice(0, 30) + (text.trim().length > 30 ? "…" : "");
+            // 先乐观更新 store，再异步写 DB
+            useChatStore.getState().updateConversationTitle(conversationId, autoTitle);
+            chatService.update(conversationId, { title: autoTitle }).catch(() => {});
+          }
+        } catch {
+          // 持久化失败：移除 temp-ID 消息，停止发送
+          useChatStore.getState().setMessages(
+            useChatStore.getState().messages.filter((m) => m.id !== tempId),
+          );
+          store.setStreaming(false);
+          store.setError("消息发送失败，请重试");
+          return;
+        }
       }
 
-      send(text, images);
+      send(text, images, documents);
     },
     [send],
   );

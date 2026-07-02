@@ -93,7 +93,7 @@ export function useConversationList() {
       );
       restoreStepsFromMessages(detail.messages);
     } catch {
-      // messages might be empty, that's ok
+      // 网络中断不阻止 UI 切换，后续可通过刷新恢复
     }
   };
 
@@ -110,7 +110,7 @@ export function useConversationList() {
         store.resetSteps();
       }
     } catch {
-      // ignore
+      useChatStore.getState().setError("删除失败，请重试");
     }
   };
 

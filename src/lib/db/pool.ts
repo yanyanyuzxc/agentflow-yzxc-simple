@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { runMigrations } from "@/lib/migrate";
 import { getEnv } from "@/lib/env";
+import { logger } from "@/lib/log";
 
 export const pool = new Pool({
   connectionString: getEnv().DATABASE_URL,
@@ -11,7 +12,7 @@ export const pool = new Pool({
 
 // 防止 PG 断连时进程崩溃（idle client 被后端踢掉时触发）
 pool.on("error", (err) => {
-  console.error("[db] pool error (idle client):", err.message);
+  logger.error("[db] pool error (idle client)", { error: err.message });
 });
 
 // 每个新连接设 statement_timeout
@@ -26,6 +27,6 @@ export async function initDB() {
   const applied = await runMigrations(pool);
   initialized = true;
   if (applied.length > 0) {
-    console.log("[db] migrations applied:", applied);
+    logger.info("[db] migrations applied", { migrations: applied });
   }
 }

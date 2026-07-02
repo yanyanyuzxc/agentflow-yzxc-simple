@@ -2,6 +2,9 @@ import type { StateCreator } from "zustand";
 import type { ChatStore } from "../store";
 import type { StreamingAgentStep } from "@/types/agent";
 
+/** 每步的开始时间戳（不在 store 里，避免持久化到 localStorage） */
+const stepTimers = new Map<string, number>();
+
 export interface StepSlice {
   agentSteps: StreamingAgentStep[];
 
@@ -34,13 +37,15 @@ export const createStepSlice: StateCreator<ChatStore, [["zustand/devtools", neve
 ) => ({
   ...initial,
 
-  addSkeleton: (step) =>
+  addSkeleton: (step) => {
+    stepTimers.set(step.stepId, Date.now());
     set((s) => ({
       agentSteps: [
         ...s.agentSteps,
         { ...step, status: "pending" as const, content: "" },
       ],
-    })),
+    }));
+  },
 
   fillThought: (stepId, content) =>
     set((s) => ({
@@ -82,12 +87,18 @@ export const createStepSlice: StateCreator<ChatStore, [["zustand/devtools", neve
       ),
     })),
 
-  finalizeStep: (stepId) =>
+  finalizeStep: (stepId) => {
+    const started = stepTimers.get(stepId);
+    const durationMs = started != null ? Date.now() - started : undefined;
+    stepTimers.delete(stepId);
     set((s) => ({
       agentSteps: s.agentSteps.map((st) =>
-        st.stepId === stepId ? { ...st, status: "done" as const } : st,
+        st.stepId === stepId
+          ? { ...st, status: "done" as const, durationMs }
+          : st,
       ),
-    })),
+    }));
+  },
 
   markStepError: (stepId, error) =>
     set((s) => ({
@@ -100,7 +111,10 @@ export const createStepSlice: StateCreator<ChatStore, [["zustand/devtools", neve
 
   /** 从历史消息恢复步骤（刷新/切换对话后） */
   setSteps: (steps: StreamingAgentStep[]) => set({ agentSteps: steps }),
-  resetSteps: () => set({ ...initial }),
+  resetSteps: () => {
+    stepTimers.clear();
+    set({ ...initial });
+  },
 
   removeAnswerSteps: () =>
     set((s) => ({

@@ -1,9 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Monitor, Bot, Sparkles, Trash2 } from "lucide-react";
+import { Monitor, Bot, Sparkles, Trash2, User, Pencil } from "lucide-react";
 import type { Message } from "@/types/models";
 import type { StreamingAgentStep } from "@/types/agent";
 import { formatTime } from "@/lib/format";
+import { useChatStore } from "@/store/chat/store";
+import { getFileTypeStyle } from "@/lib/fileType";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { StepsPanel } from "./StepsPanel";
@@ -14,10 +16,22 @@ const Markdown = dynamic(() => import("./Markdown").then((m) => ({ default: m.Ma
   loading: () => <div className="h-4 w-32 rounded animate-pulse" style={{ background: "var(--bg-hover)" }} />,
 });
 
+/** 安全解析消息携带的 agent_steps JSON */
+function parseAgentSteps(raw: string | undefined): StreamingAgentStep[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 interface MessageListProps {
   messages: Message[];
   agentSteps?: StreamingAgentStep[];
   isStreaming?: boolean;
+  totalDurationMs?: number | null;
   onDeletePair?: (humanMsg: Message, aiMsg: Message) => void;
   onRegenerate?: (humanMsg: Message, aiMsg: Message) => void;
   onRewind?: (humanMsg: Message, aiMsg: Message) => void;
@@ -42,6 +56,7 @@ export function MessageList({
   messages,
   agentSteps,
   isStreaming,
+  totalDurationMs,
   onDeletePair,
   onRegenerate,
   onRewind,
@@ -72,10 +87,22 @@ export function MessageList({
   }
 
   const lastMsg = messages[messages.length - 1];
-  const renderSteps = agentSteps?.filter((s) => s.type !== "answer") ?? [];
-  const assistantHasContent = lastMsg?.role === "assistant" && !!lastMsg.content;
-  const stepsAllDone = renderSteps.every((s) => s.status === "done" || s.status === "error");
+  const stepsAllDone = (agentSteps ?? []).filter((s) => s.type !== "answer").every((s) => s.status === "done" || s.status === "error");
   const showThinking = isStreaming && lastMsg?.role === "user" && stepsAllDone;
+
+  // 根据当前步骤推断打字指示器文案
+  const thinkingLabel = useMemo(() => {
+    if (!isStreaming) return "思考中";
+    const lastStep = (agentSteps ?? []).slice(-1)[0];
+    if (!lastStep) return "思考中";
+    if (lastStep.type === "tool_call" && lastStep.name === "web_search") return "正在联网搜索…";
+    if (lastStep.type === "tool_call" && lastStep.name === "search_docs") return "搜索知识库中…";
+    if (lastStep.type === "tool_call" && lastStep.name === "crawl_page") return "正在抓取页面…";
+    if (lastStep.type === "tool_call" && lastStep.name === "speak") return "正在委派 Agent…";
+    if (lastStep.type === "observation") return "正在处理结果…";
+    if (lastStep.type === "thought") return "思考中…";
+    return "AI 思考中…";
+  }, [isStreaming, agentSteps]);
 
   return (
     <div className="px-6 py-6">
@@ -88,21 +115,38 @@ export function MessageList({
               !prev ||
               new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() > 5 * 60 * 1000;
 
-            const isLastUser = isUser && i === messages.length - 1 && !assistantHasContent;
+            const isLastUser = isUser && i === messages.length - 1 && lastMsg?.role === "user";
             const isLastAssistant = !isUser && i === messages.length - 1 && msg.role === "assistant";
+
+            // 确定当前消息对的步骤数据：
+            // - 最后一条（正在流式）→ 用 store 的 agentSteps
+            // - 历史消息 → 用 message.agent_steps（DB 持久化的 JSON）
+            let pairSteps: StreamingAgentStep[] = [];
+            if (isLastAssistant || isLastUser) {
+              pairSteps = (agentSteps ?? []).filter((s) => s.type !== "answer");
+            } else if (!isUser) {
+              pairSteps = parseAgentSteps(msg.agent_steps).filter((s) => s.type !== "answer");
+            }
+
+            // 当前轮的回答还没产出 → 不在用户气泡旁边显示步骤
+            const assistantHasContent = isLastUser ? false : lastMsg?.role === "assistant" && !!lastMsg.content;
 
             return (
               <div key={i}>
                 {showTime && <MessageTime dateStr={msg.created_at} />}
 
-                {/* 步骤面板 */}
-                {(isLastUser || isLastAssistant) && renderSteps.length > 0 && (
+                {/* 步骤面板 — 每个消息对使用各自的 agent_steps */}
+                {pairSteps.length > 0 && (
                   <div className="flex gap-2.5 mb-3 message-enter">
                     <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-purple-500 to-pink-500 shadow-sm">
                       <Bot className="w-4 h-4 text-white" strokeWidth={2.5} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <StepsPanel steps={renderSteps} autoCollapse={isLastAssistant && !isStreaming} />
+                      <StepsPanel
+                        steps={pairSteps}
+                        autoCollapse={!isStreaming || i < messages.length - 1}
+                        totalDurationMs={totalDurationMs}
+                      />
                     </div>
                   </div>
                 )}
@@ -114,7 +158,7 @@ export function MessageList({
                       isUser ? "bg-gradient-to-br from-blue-500 to-blue-600" : "bg-gradient-to-br from-purple-500 to-pink-500"
                     }`}
                   >
-                    {isUser ? "U" : <Bot className="w-4 h-4" strokeWidth={2.5} />}
+                    {isUser ? <User className="w-4 h-4" strokeWidth={2.5} /> : <Bot className="w-4 h-4" strokeWidth={2.5} />}
                   </div>
                   <div className={`flex flex-col ${isUser ? "items-end" : "items-start"} max-w-[85%]`}>
                     {/* 用户图片缩略图 */}
@@ -138,6 +182,39 @@ export function MessageList({
                         ))}
                       </div>
                     )}
+                    {/* 用户文档卡片 */}
+                    {isUser && msg.documents && msg.documents.length > 0 && (
+                      <div className="flex gap-1.5 mb-1.5 flex-wrap justify-end">
+                        {msg.documents.map((doc, j) => {
+                          const style = getFileTypeStyle(doc.type);
+                          return (
+                            <div
+                              key={j}
+                              className="flex items-center gap-2 rounded-xl px-3 py-2 shadow-sm"
+                              style={{
+                                background: style.bg,
+                                border: `1px solid ${style.color}20`,
+                              }}
+                              title={`${doc.name} (${doc.tokens} tokens${doc.truncated ? ", 已截断" : ""})`}
+                            >
+                              <span className="text-base">{style.icon}</span>
+                              <div className="min-w-0">
+                                <p
+                                  className="text-[11px] font-medium truncate max-w-[140px]"
+                                  style={{ color: style.color }}
+                                >
+                                  {doc.name}
+                                </p>
+                                <p className="text-[10px]" style={{ color: `${style.color}99` }}>
+                                  {doc.type.toUpperCase()} · {(doc.size / 1024).toFixed(0)}KB
+                                  {doc.truncated && " · 已截断"}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     {msg.content && (
                       <div
                         className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
@@ -154,6 +231,27 @@ export function MessageList({
                         ) : (
                           <Markdown content={msg.content} />
                         )}
+                        {/* Token 用量 */}
+                        {!isUser && msg.tokens != null && msg.tokens > 0 && (
+                          <div className="mt-1.5 pt-1.5 flex items-center gap-1 text-[10px]" style={{ color: "var(--text-tertiary)", borderTop: "1px solid var(--border-subtle)" }}>
+                            <span className="opacity-70">{msg.tokens >= 1000 ? `${(msg.tokens / 1000).toFixed(1)}k` : msg.tokens} tokens</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 用户消息 — 编辑按钮 */}
+                    {isUser && msg.content && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex items-center gap-1 justify-end">
+                        <button
+                          className="px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1 transition-colors hover:bg-white/10"
+                          style={{ color: "var(--text-tertiary)" }}
+                          onClick={() => useChatStore.getState().setDraft(msg.content)}
+                          title="编辑后重新发送"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          编辑
+                        </button>
                       </div>
                     )}
 
@@ -213,7 +311,7 @@ export function MessageList({
               >
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                  <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>思考中</span>
+                  <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>{thinkingLabel}</span>
                   <span className="flex gap-0.5">
                     <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                     <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />

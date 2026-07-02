@@ -15,6 +15,9 @@ export function ChatArea() {
   const messages = useChatStore((s) => s.messages);
   const agentSteps = useChatStore((s) => s.agentSteps);
   const isStreaming = useChatStore((s) => s.isStreaming);
+  const totalDurationMs = useChatStore((s) => s.totalDurationMs);
+  const error = useChatStore((s) => s.error);
+  const incompleteAnswer = useChatStore((s) => s.incompleteAnswer);
   const containerRef = useRef<HTMLDivElement>(null);
   const handleSend = useChatSend(send);
 
@@ -87,7 +90,29 @@ export function ChatArea() {
   return (
     <div className="flex flex-col h-full" onKeyDown={handleKeyDown} tabIndex={-1}>
       <div ref={containerRef} className="flex-1 overflow-y-auto">
-        <MessageList messages={messages} agentSteps={agentSteps} isStreaming={isStreaming} onDeletePair={handleDeletePair} onRegenerate={handleRegenerate} onRewind={handleRewind} />
+        {error && (
+          <div className="mx-4 mt-2 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              className="ml-3 text-red-500 hover:text-red-700 dark:hover:text-red-200 underline shrink-0"
+              onClick={() => useChatStore.getState().setError(null)}
+            >
+              关闭
+            </button>
+          </div>
+        )}
+        {incompleteAnswer && (
+          <div className="mx-4 mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs text-center">
+            响应中断，回答可能不完整
+            <button
+              className="ml-2 underline"
+              onClick={() => useChatStore.getState().setIncompleteAnswer(false)}
+            >
+              关闭
+            </button>
+          </div>
+        )}
+        <MessageList messages={messages} agentSteps={agentSteps} isStreaming={isStreaming} totalDurationMs={totalDurationMs} onDeletePair={handleDeletePair} onRegenerate={handleRegenerate} onRewind={handleRewind} />
       </div>
       <InterruptHandler />
       <ChatInput onSend={handleSend} disabled={isStreaming} />

@@ -5,13 +5,23 @@ import { ThoughtCard } from "@/features/AgentSteps/components/ThoughtCard";
 import { ToolCallCard } from "@/features/AgentSteps/components/ToolCallCard";
 import { ObservationCard } from "@/features/AgentSteps/components/ObservationCard";
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const min = Math.floor(ms / 60000);
+  const sec = Math.round((ms % 60000) / 1000);
+  return `${min}m${sec}s`;
+}
+
 /** 步骤面板：可折叠，使用现有 AgentSteps 卡片 */
 export function StepsPanel({
   steps,
   autoCollapse,
+  totalDurationMs,
 }: {
   steps: StreamingAgentStep[];
   autoCollapse: boolean;
+  totalDurationMs?: number | null;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -51,7 +61,7 @@ export function StepsPanel({
           className="text-[10px] font-medium px-1.5 py-0.5 rounded ml-auto"
           style={{ background: "var(--bg-panel)", color: "var(--text-tertiary)" }}
         >
-          {steps.length} 步
+          {steps.length} 步{totalDurationMs != null ? ` · ${formatDuration(totalDurationMs)}` : ""}
         </span>
       </button>
 

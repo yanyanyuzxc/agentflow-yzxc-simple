@@ -3,6 +3,7 @@ import { parseFile, getFileType, isFileTypeSupported } from "@/lib/file";
 import { requireAuth } from "@/lib/auth";
 import { resOk, resErr } from "@/lib/resp";
 import { join } from "path";
+import { logger } from "@/lib/log";
 
 export async function GET(
   req: Request,
@@ -41,7 +42,7 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("获取文档内容失败:", error);
+    logger.error("获取文档内容失败", { error: (error as Error).message });
     return resErr(500, "获取文档内容失败");
   }
 }

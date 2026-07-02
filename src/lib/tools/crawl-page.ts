@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { getEnv } from "@/lib/env";
 import type { ToolDef } from "./base";
 
 const CrawlPageInput = z.object({
@@ -7,6 +8,10 @@ const CrawlPageInput = z.object({
     .number().int().min(500).max(20000)
     .optional()
     .describe("最大返回字符数，默认 5000。超过截断并标记省略"),
+  extract_depth: z
+    .enum(["basic", "advanced"])
+    .optional()
+    .describe("提取深度：basic=标准页面（快，默认），advanced=JS渲染页面/SPA（慢，2倍消耗）"),
 });
 type CrawlPageInput = z.infer<typeof CrawlPageInput>;
 
@@ -97,7 +102,82 @@ function htmlToText(html: string): string {
   return text.trim();
 }
 
-// ==================== 网页抓取 ====================
+// ==================== Tavily Extract（优先） ====================
+
+interface TavilyExtractResult {
+  url: string;
+  raw_content: string;
+  images?: string[];
+  favicon?: string;
+}
+
+/**
+ * 使用 Tavily Extract API 提取网页正文。
+ * 优势：自动清洗导航/侧边栏、支持 JS 渲染页面（advanced）、返回干净 Markdown。
+ */
+async function extractViaTavily(
+  url: string,
+  maxChars: number,
+  depth: "basic" | "advanced" = "basic",
+): Promise<string> {
+  const apiKey = getEnv().TAVILY_API_KEY!;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const response = await fetch("https://api.tavily.com/extract", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        urls: [url],
+        extract_depth: depth,
+        format: "markdown",
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Tavily Extract returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    const results: TavilyExtractResult[] = data.results ?? [];
+    const failed = data.failed_results ?? [];
+
+    if (results.length === 0) {
+      const reason = failed.length > 0
+        ? `Tavily could not extract this page${failed[0]?.error ? `: ${failed[0].error}` : ""}.`
+        : "Tavily returned no content.";
+      throw new Error(reason);
+    }
+
+    const content = results[0].raw_content || "";
+
+    if (!content.trim()) {
+      throw new Error("Tavily extracted empty content from this page.");
+    }
+
+    const truncated = content.length > maxChars;
+    const result = content.slice(0, maxChars);
+
+    return [
+      `[Crawled page content via Tavily ${depth === "advanced" ? "(advanced/JS)" : "(basic)"}]`,
+      `URL: ${url}`,
+      `Extracted: ${content.length.toLocaleString()} chars | Displaying: ${truncated ? maxChars.toLocaleString() : content.length.toLocaleString()} chars`,
+      truncated ? `⚠️ Content truncated. Use max_chars up to 20000 or narrower URLs for more.` : "",
+      "",
+      result,
+      truncated ? "\n[Content truncated — end of displayed portion]" : "",
+    ].filter(Boolean).join("\n");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ==================== 裸 fetch 抓取（兜底） ====================
 
 async function crawlUrl(url: string, maxChars: number): Promise<string> {
   const controller = new AbortController();
@@ -165,16 +245,30 @@ export const crawlPageTool: ToolDef<CrawlPageInput> = {
   name: "crawl_page",
   description:
     "抓取指定网页并提取可读文本内容。用于深入阅读搜索结果中的网页。" +
-    "只支持 HTML/text 页面，不支持 PDF、图片等。单页应用（SPA）可能无法抓取。" +
-    "默认返回前 5000 字符，可通过 max_chars 调整（最多 20000）。",
+    "优先使用 AI 驱动的正文提取（干净 Markdown、自动去噪），失败时自动降级到原生抓取。" +
+    "默认返回前 5000 字符，可通过 max_chars 调整（最多 20000）。" +
+    "对 JS 渲染页面（SPA）使用 extract_depth=advanced。",
   schema: CrawlPageInput,
 
-  async call({ url, max_chars }) {
+  async call({ url, max_chars, extract_depth }) {
     const blocked = isBlockedUrl(url);
     if (blocked) return `crawl_page failed: ${blocked}`;
 
     const limit = max_chars ?? 5000;
+    const depth = extract_depth ?? "basic";
 
+    // Tavily Extract 优先（有 key 时走干净正文 + SPA 支持）
+    if (getEnv().TAVILY_API_KEY) {
+      try {
+        return await extractViaTavily(url, limit, depth);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        // Tavily 失败不直接报错，降级到裸 fetch
+        console.warn(`[crawl_page] Tavily Extract failed, falling back to fetch: ${msg}`);
+      }
+    }
+
+    // 兜底：裸 fetch + htmlToText
     try {
       return await crawlUrl(url, limit);
     } catch (e) {

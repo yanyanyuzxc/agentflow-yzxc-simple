@@ -2,6 +2,7 @@
 
 import { Search, Sparkles, Cpu, Type, GitMerge } from "lucide-react";
 import { useSearchTest } from "../hooks/useSearchTest";
+import { ErrorDisplay } from "@/components/ui/ErrorDisplay";
 import type { SearchMode } from "@/types/api";
 
 const MODE_OPTIONS: { key: SearchMode; label: string; icon: React.ReactNode; hint: string }[] = [
@@ -85,14 +86,7 @@ export function SearchTest() {
       </div>
 
       {/* Error */}
-      {error && (
-        <div
-          className="rounded-xl px-4 py-3"
-          style={{ background: "var(--bg-panel)", border: "1px solid var(--border-default)" }}
-        >
-          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{error}</p>
-        </div>
-      )}
+      {error && <ErrorDisplay message={error} />}
 
       {/* Results */}
       {results && (

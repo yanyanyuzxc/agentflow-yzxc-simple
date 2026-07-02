@@ -25,11 +25,11 @@ export function getFileTypeStyle(fileType: string | undefined | null): FileTypeS
 
 // ==================== 上传相关 ====================
 
-export const UPLOAD_ACCEPT_TYPES = ".txt,.md,.markdown,.pdf";
+export const UPLOAD_ACCEPT_TYPES = ".txt,.md,.markdown,.pdf,.docx";
 
 export const UPLOAD_MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
-export const SUPPORTED_FILE_EXTS = [".txt", ".md", ".markdown", ".pdf"] as const;
+export const SUPPORTED_FILE_EXTS = [".txt", ".md", ".markdown", ".pdf", ".docx"] as const;
 
 export function isExtSupported(filename: string): boolean {
   const ext = "." + filename.split(".").pop()?.toLowerCase();

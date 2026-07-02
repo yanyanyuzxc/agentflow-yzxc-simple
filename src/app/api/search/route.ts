@@ -3,6 +3,7 @@ import { rerank, expandQuery } from '@/lib/rag'
 import { SearchInput, parseBody } from '@/lib/schemas'
 import { getEmbedding } from '@/lib/embedding-cache'
 import { resOk, resErr } from '@/lib/resp'
+import { logger } from "@/lib/log";
 
 async function searchSingle(
   userId: number,
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error('搜索失败:', error)
+    logger.error('搜索失败', { error: (error as Error).message })
     return resErr(500, '搜索失败')
   }
 }

@@ -1,4 +1,5 @@
 import type { ChunkOptions, TextChunk, RerankResult, RerankOptions, RagPipelineConfig } from "./types";
+import { logger } from "@/lib/log";
 
 // ==================== Token 估算 ====================
 
@@ -69,11 +70,12 @@ export class RagPipeline {
   constructor(config: RagPipelineConfig = {}) {
     const env = getEnv();
     this.config = {
-      apiKey: config.apiKey ?? env.SILICONFLOW_API_KEY,
+      chatApiKey: config.chatApiKey ?? env.LLM_API_KEY ?? "",
+      embeddingApiKey: config.embeddingApiKey ?? env.SILICONFLOW_API_KEY,
       embeddingModel: config.embeddingModel ?? env.EMBEDDING_MODEL ?? "BAAI/bge-m3",
-      embeddingBaseURL: config.embeddingBaseURL ?? env.LLM_BASE_URL ?? "https://api.siliconflow.cn/v1",
-      chatModel: config.chatModel ?? env.LLM_MODEL ?? "deepseek-ai/DeepSeek-V4-Flash",
-      chatBaseURL: config.chatBaseURL ?? env.LLM_BASE_URL ?? "https://api.siliconflow.cn/v1",
+      embeddingBaseURL: config.embeddingBaseURL ?? env.EMBEDDING_BASE_URL ?? "https://api.siliconflow.cn/v1",
+      chatModel: config.chatModel ?? env.LLM_MODEL ?? "deepseek-chat",
+      chatBaseURL: config.chatBaseURL ?? env.LLM_BASE_URL ?? "https://api.deepseek.com/v1",
     };
   }
 
@@ -87,9 +89,9 @@ export class RagPipeline {
     return `${this.config.chatBaseURL}/chat/completions`;
   }
 
-  /** Rerank API 完整 URL */
+  /** Rerank API 完整 URL（走 SiliconFlow，DeepSeek 无此服务） */
   private get rerankURL(): string {
-    return `${this.config.chatBaseURL}/rerank`;
+    return `${this.config.embeddingBaseURL}/rerank`;
   }
 
   // ==================== Chunk ====================
@@ -162,7 +164,7 @@ export class RagPipeline {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.config.apiKey}`,
+        Authorization: `Bearer ${this.config.chatApiKey}`,
       },
       body: JSON.stringify({
         model: this.config.chatModel,
@@ -177,7 +179,7 @@ export class RagPipeline {
     });
 
     if (!response.ok) {
-      console.error("Query expansion API error:", response.status);
+      logger.error("Query expansion API error", { status: response.status });
       return [userQuery];
     }
 
@@ -236,7 +238,7 @@ export class RagPipeline {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.config.apiKey}`,
+        Authorization: `Bearer ${this.config.embeddingApiKey}`,
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),

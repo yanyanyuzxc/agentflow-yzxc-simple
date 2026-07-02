@@ -5,6 +5,7 @@ import { parseBody } from "@/lib/schemas";
 import { resOk, resErr } from "@/lib/resp";
 import { CheckpointManager } from "@/lib/agent/checkpoint";
 import { getEnv } from "@/lib/env";
+import { logger } from "@/lib/log";
 
 const RewindInput = z.object({
   message_id: z.number(),
@@ -33,7 +34,7 @@ export async function POST(
     return resOk({ deleted });
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("回退消息失败:", error);
+    logger.error("回退消息失败", { error: (error as Error).message });
     return resErr(500, (error as Error).message || "回退失败");
   }
 }

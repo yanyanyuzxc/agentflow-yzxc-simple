@@ -43,3 +43,9 @@ next-env.d.ts
 # claude settings (may contain secrets)
 .claude/
 .mcp.json
+
+# playwright debug artifacts
+.playwright-mcp/
+
+# user uploads (runtime data)
+uploads/

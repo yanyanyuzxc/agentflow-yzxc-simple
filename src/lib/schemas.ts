@@ -24,12 +24,24 @@ export const ImageAttachmentInput = z.object({
 });
 export type ImageAttachmentInput = z.infer<typeof ImageAttachmentInput>;
 
+export const DocumentAttachmentInput = z.object({
+  name: z.string(),
+  type: z.string(),
+  size: z.number(),
+  text: z.string(),
+  tokens: z.number(),
+  truncated: z.boolean(),
+});
+export type DocumentAttachmentInput = z.infer<typeof DocumentAttachmentInput>;
+
 export const AgentRunInput = z.object({
   question: z.string().optional(),
   threadId: z.string().optional(),
   resume: z.string().optional(),
   images: z.array(ImageAttachmentInput).optional(),
+  documents: z.array(DocumentAttachmentInput).optional(),
   webSearchEnabled: z.boolean().optional(),
+  knowledgeBaseEnabled: z.boolean().optional(),
 });
 export type AgentRunInput = z.infer<typeof AgentRunInput>;
 
@@ -54,8 +66,22 @@ export type ConversationUpdateInput = z.infer<typeof ConversationUpdateInput>;
 export const MessageAddInput = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
-  tool_calls: z.any().optional(),
-  agent_steps: z.any().optional(),
+  tool_calls: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    args: z.unknown(),
+  })).optional(),
+  agent_steps: z.array(z.object({
+    type: z.enum(["thought", "tool_call", "observation", "answer"]),
+    content: z.string().optional(),
+    name: z.string().optional(),
+    args: z.unknown().optional(),
+    result: z.string().optional(),
+    stepId: z.string().optional(),
+    label: z.string().optional(),
+    status: z.string().optional(),
+    durationMs: z.number().optional(),
+  })).optional(),
   tokens: z.number().optional(),
 });
 export type MessageAddInput = z.infer<typeof MessageAddInput>;
@@ -105,11 +131,36 @@ export const EmbeddingInput = z.object({
 });
 export type EmbeddingInput = z.infer<typeof EmbeddingInput>;
 
+// ==================== File Upload ====================
+
+export const ImageUploadInput = z.object({
+  image: z.instanceof(File, { message: "请选择图片" })
+    .refine((f) => f.size <= 10 * 1024 * 1024, "图片超过 10MB 限制")
+    .refine((f) => ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(f.type), "不支持的图片格式，仅支持 PNG / JPEG / GIF / WebP"),
+});
+export type ImageUploadInput = z.infer<typeof ImageUploadInput>;
+
+export const DocumentUploadInput = z.object({
+  file: z.instanceof(File, { message: "请选择文件" })
+    .refine((f) => f.size <= 5 * 1024 * 1024, "文件超过 5MB 限制")
+    .refine((f) => {
+      const name = f.name.toLowerCase();
+      return [".txt", ".md", ".markdown", ".pdf", ".docx"].some((ext) => name.endsWith(ext));
+    }, "不支持的文件格式，仅支持 .txt / .md / .pdf / .docx"),
+});
+export type DocumentUploadInput = z.infer<typeof DocumentUploadInput>;
+
 // ==================== Helper ====================
 
 /** 从 request 解析 JSON 并校验，不合法时抛出 400 Response */
 export async function parseBody<T>(req: Request, schema: z.ZodSchema<T>): Promise<T> {
-  const result = schema.safeParse(await req.json());
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    throw resErr(400, "请求体格式错误，需要合法的 JSON");
+  }
+  const result = schema.safeParse(raw);
   if (!result.success) {
     throw resErr(400, "参数校验失败", result.error.issues);
   }

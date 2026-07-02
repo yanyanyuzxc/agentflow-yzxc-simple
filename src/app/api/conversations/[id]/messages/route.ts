@@ -9,6 +9,7 @@ import { MessageAddInput, MessageDeleteInput, parseBody } from "@/lib/schemas";
 import { resOk, resErr } from "@/lib/resp";
 import { CheckpointManager } from "@/lib/agent/checkpoint";
 import { getEnv } from "@/lib/env";
+import { logger } from "@/lib/log";
 
 export async function GET(
   req: Request,
@@ -21,7 +22,7 @@ export async function GET(
     return resOk(messages);
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("获取消息失败:", error);
+    logger.error("获取消息失败", { error: (error as Error).message });
     return resErr(500, "获取消息失败");
   }
 }
@@ -45,7 +46,7 @@ export async function POST(
     return resOk(msg, 201);
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("添加消息失败:", error);
+    logger.error("添加消息失败", { error: (error as Error).message });
     return resErr(500, "添加消息失败");
   }
 }
@@ -69,13 +70,13 @@ export async function DELETE(
     if (conv?.thread_id) {
       const cm = new CheckpointManager(getEnv().DATABASE_URL);
       await cm.clearThread(conv.thread_id);
-      console.log("[TimeTravel] 已清除 thread %s 的检查点", conv.thread_id);
+      logger.info("[TimeTravel] 已清除 thread 的检查点", { threadId: conv.thread_id });
     }
 
     return resOk({ deleted });
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("删除消息失败:", error);
+    logger.error("删除消息失败", { error: (error as Error).message });
     return resErr(500, (error as Error).message || "删除消息失败");
   }
 }

@@ -1,5 +1,5 @@
 import { pool, initDB } from "@/lib/db";
-import { getOpenAI } from "@/lib/llm";
+import { getEmbeddingClient } from "@/lib/llm";
 
 // ==================== SHA256 (Web Crypto) ====================
 
@@ -84,7 +84,7 @@ export async function getEmbedding(text: string, model = "BAAI/bge-m3"): Promise
   }
 
   // L3: API
-  const openai = getOpenAI();
+  const openai = getEmbeddingClient();
   const result = await openai.embeddings.create({
     model,
     input: text,
@@ -173,7 +173,7 @@ export async function getEmbeddings(
 
   // API 兜底
   if (missIndices.length > 0) {
-    const openai = getOpenAI();
+    const openai = getEmbeddingClient();
     const apiResult = await openai.embeddings.create({
       model,
       input: missTexts,

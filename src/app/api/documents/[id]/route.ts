@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { resOk, resErr } from "@/lib/resp";
 import { unlink } from "fs/promises";
 import { join } from "path";
+import { logger } from "@/lib/log";
 
 export async function GET(
   req: Request,
@@ -15,7 +16,7 @@ export async function GET(
     return resOk(chunks);
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("获取文档块失败:", error);
+    logger.error("获取文档块失败", { error: (error as Error).message });
     return resErr(500, "获取文档块失败");
   }
 }
@@ -37,7 +38,7 @@ export async function DELETE(
     return resOk(null);
   } catch (error) {
     if (error instanceof Response) throw error;
-    console.error("删除文档失败:", error);
+    logger.error("删除文档失败", { error: (error as Error).message });
     return resErr(500, "删除文档失败");
   }
 }
